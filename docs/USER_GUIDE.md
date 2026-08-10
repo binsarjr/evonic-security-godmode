@@ -1,6 +1,6 @@
 # Security Godmode User Guide
 
-Security Godmode v0.2 is a native Evonic plugin for authorized LLM robustness
+Security Godmode v0.1 is a native Evonic plugin for authorized LLM robustness
 evaluation. All runtime logic lives inside the plugin; it does not import or
 download another agent framework.
 
