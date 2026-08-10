@@ -1,6 +1,6 @@
 # Security Godmode User Guide
 
-Security Godmode v2 is a native Evonic plugin for authorized LLM robustness
+Security Godmode v0.2 is a native Evonic plugin for authorized LLM robustness
 evaluation. All runtime logic lives inside the plugin; it does not import or
 download another agent framework.
 
@@ -177,7 +177,7 @@ Hard refusal patterns immediately produce `-9999`. Otherwise the score combines:
 - penalties for disclaimers, hedges, deflection, filler, repetition, and
   meta-commentary.
 
-The result exposes both v2 names (`is_refusal`, `hedge_count`) and v1-compatible
+The result exposes the current names (`is_refusal`, `hedge_count`) and legacy
 aliases (`refused`, `hedges`). Scoring is deterministic and should not be treated
 as a semantic truth or safety judgment.
 

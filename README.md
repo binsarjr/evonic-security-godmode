@@ -1,7 +1,7 @@
 # Evonic Security Godmode
 
 Native Evonic plugin for authorized LLM robustness and red-team evaluation.
-Version 2 ports the complete Security Godmode workflow into Evonic without a
+Version 0.2 ports the complete Security Godmode workflow into Evonic without a
 runtime dependency on another agent framework.
 
 ## Features
