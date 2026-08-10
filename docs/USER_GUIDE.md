@@ -63,7 +63,9 @@ run the corresponding actions:
 - `godmode_race`
 
 `godmode_auto(dry_run=false)` and `godmode_profile(action="enable")` also turn
-on direct injection for the current agent.
+on direct injection for the current agent. Calling `enable` without a profile
+payload uses the model-family default; it does not create a generic audit
+profile.
 
 ## Direct injection
 
@@ -297,6 +299,11 @@ turn-context hook. It is intentionally not a separate post-application receipt.
 The same values appear as `security_godmode` under **Agent State → Plugin
 States** in the chat frontend. This is a display-only Evonic plugin summary; it
 does not create a workflow gate or add state text to the model prompt.
+
+`effective_system_prompt` and `effective_prefill` expose the exact payload that
+will be supplied on the next turn. Legacy placeholder audit profiles from early
+development builds are ignored automatically, while explicit manual profiles
+and auto-discovered winners retain precedence.
 
 Disable injection while retaining the payload:
 

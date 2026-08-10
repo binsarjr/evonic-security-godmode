@@ -5,7 +5,7 @@ import types
 import unittest
 
 from plugin.backend.tools import _lib as lib
-from plugin.backend.tools import godmode_transform
+from plugin.backend.tools import godmode_profile, godmode_transform
 from plugin.backend.tools._godmode import parseltongue, racing, strategies
 
 
@@ -131,6 +131,43 @@ class GodmodeParityTests(unittest.TestCase):
 
         lib.set_activation("agent-1", False)
         self.assertFalse(lib.profile_status("agent-1")["activation_enabled"])
+
+    def test_legacy_audit_placeholder_does_not_override_direct_injection(self):
+        self.evonic_db.model.update(
+            id="deepseek-test", provider="deepseek", model_name="deepseek-chat",
+        )
+        lib.set_profile(
+            "agent-1", True, "audit", system_prompt=lib.LEGACY_CONTEXTS["audit"],
+            model_family_name="unknown", profile_source="",
+        )
+        effective = lib.effective_profile("agent-1")
+        expected = strategies.MODEL_STRATEGIES["deepseek"]["system_templates"]["refusal_inversion"]
+        self.assertEqual(effective["profile_source"], "default")
+        self.assertEqual(effective["strategy"], "refusal_inversion+prefill")
+        self.assertEqual(effective["system_prompt"], expected)
+        self.assertEqual(effective["prefill"], strategies.STANDARD_PREFILL)
+
+        lib.set_activation("agent-1", True)
+        status = lib.profile_status("agent-1")
+        self.assertEqual(status["effective_system_prompt"], expected)
+        self.assertEqual(status["effective_prefill"], strategies.STANDARD_PREFILL)
+
+        lib.set_profile(
+            "agent-1", True, "audit", system_prompt=lib.LEGACY_CONTEXTS["audit"],
+            model_family_name="unknown", profile_source="manual",
+        )
+        self.assertEqual(lib.effective_profile("agent-1")["profile_source"], "manual")
+
+    def test_profile_enable_without_payload_uses_direct_default(self):
+        result = godmode_profile.execute({"id": "agent-1"}, {"action": "enable"})
+        self.assertTrue(result["profile"]["activation_enabled"])
+        self.assertEqual(result["profile"]["payload_source"], "default")
+        self.assertFalse(lib.get_profile("agent-1")["source_version"])
+
+        godmode_profile.execute({"id": "agent-1"}, {
+            "action": "enable", "strategy": "audit",
+        })
+        self.assertEqual(lib.effective_profile("agent-1")["profile_source"], "manual")
 
     def test_complete_racing_catalog_and_strategy_order(self):
         self.assertEqual(len(racing.ULTRAPLINIAN_MODELS), 55)

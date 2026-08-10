@@ -144,7 +144,16 @@ def default_profile(agent_id: str) -> dict[str, Any]:
 
 def effective_profile(agent_id: str) -> dict[str, Any]:
     profile = get_profile(agent_id)
-    if profile.get("source_version"):
+    legacy_placeholder = (
+        not profile.get("profile_source")
+        and profile.get("strategy") == "audit"
+        and profile.get("system_prompt") == LEGACY_CONTEXTS["audit"]
+        and not profile.get("custom_context")
+        and not profile.get("prefill")
+        and not profile.get("encoding")
+        and profile.get("model_family") in {"", "unknown"}
+    )
+    if profile.get("source_version") and not legacy_placeholder:
         profile["profile_source"] = profile.get("profile_source") or "manual"
         return profile
     return default_profile(agent_id)
@@ -178,6 +187,8 @@ def profile_status(agent_id: str) -> dict[str, Any]:
     )
     saved["effective_strategy"] = effective.get("strategy") if effective else None
     saved["effective_model_family"] = effective.get("model_family") if effective else None
+    saved["effective_system_prompt"] = effective.get("system_prompt") if effective else None
+    saved["effective_prefill"] = effective.get("prefill") if effective else None
     return saved
 
 

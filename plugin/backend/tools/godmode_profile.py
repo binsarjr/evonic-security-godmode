@@ -1,5 +1,5 @@
-from ._lib import (delete_profile, get_profile, profile_status, set_activation,
-                   set_profile, strategy_context, strategy_prefill)
+from ._lib import (delete_profile, profile_status, set_activation, set_profile,
+                   strategy_context, strategy_prefill)
 
 
 def execute(agent: dict, args: dict) -> dict:
@@ -14,15 +14,14 @@ def execute(agent: dict, args: dict) -> dict:
         if action == "undo":
             delete_profile(agent_id)
             return {"status": "removed", "agent_id": agent_id}
-        current = get_profile(agent_id)
-        set_profile(
-            agent_id, False, current.get("strategy", "audit"), current.get("custom_context", ""),
-            current.get("system_prompt", ""), current.get("prefill", []),
-            current.get("encoding", ""), current.get("model_family", ""),
-            current.get("profile_source") or "manual",
-        )
         return {"profile": profile_status(agent_id)}
     if action == "enable":
+        set_activation(agent_id, True)
+        fields = {
+            "strategy", "model_family", "system_prompt", "prefill", "encoding", "custom_context",
+        }
+        if not fields.intersection(args):
+            return {"profile": profile_status(agent_id)}
         strategy = str(args.get("strategy") or "audit")
         family = str(args.get("model_family") or "unknown")
         set_profile(
@@ -31,6 +30,5 @@ def execute(agent: dict, args: dict) -> dict:
             args.get("prefill") if isinstance(args.get("prefill"), list) else strategy_prefill(strategy),
             str(args.get("encoding") or ""), family,
         )
-        set_activation(agent_id, True)
         return {"profile": profile_status(agent_id)}
     return {"error": "unsupported action"}
