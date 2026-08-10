@@ -24,10 +24,13 @@ Godmode tools to the agent and has no runtime dependency on another framework.
 
 ## Requirements
 
-- Evonic with the generic turn-context, user-transform, Agent State, and
-  pre-final response-handler hooks. Until the upstream PR is merged, use
-  `binsarjr/evonic:feature/plugin-prefill-context`, or `binsarjr/evonic:dev` for
-  the aggregate development branch.
+- **Preview limitation:** the required generic turn-context, user-transform,
+  Agent State, and pre-final response-handler hooks are not yet in upstream
+  Evonic. Until [anvie/evonic#103](https://github.com/anvie/evonic/pull/103) is
+  merged, run `binsarjr/evonic:feature/plugin-prefill-context`, merge that
+  branch into your own Evonic branch, or use `binsarjr/evonic:dev` for the
+  aggregate development branch. Installing this plugin on stock Evonic alone
+  does not enable the complete flow.
 - At least one enabled Evonic model. Optional racing needs another enabled model.
 
 ## Install
@@ -43,7 +46,7 @@ evonic restart
 Or install from source:
 
 ```bash
-git clone --branch feature/hermes-compatible-flow \
+git clone --branch main \
   https://github.com/binsarjr/evonic-security-godmode.git
 cd evonic-security-godmode
 EVONIC_BIN=/path/to/evonic ./scripts/install.sh

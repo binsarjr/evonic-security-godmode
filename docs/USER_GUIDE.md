@@ -45,9 +45,13 @@ evonic restart
 
 The package may also be imported from Evonic's Plugins page.
 
-The required generic core hooks are available on
-`binsarjr/evonic:feature/plugin-prefill-context`; the aggregate development
-branch is `binsarjr/evonic:dev`.
+> **Preview compatibility:** the required generic core hooks are not yet in
+> upstream Evonic. Until
+> [anvie/evonic#103](https://github.com/anvie/evonic/pull/103) is merged, run
+> `binsarjr/evonic:feature/plugin-prefill-context`, merge that branch into your
+> own Evonic branch, or use the aggregate `binsarjr/evonic:dev` branch. The
+> plugin can be installed on stock Evonic, but its complete runtime flow will
+> not be available.
 
 ## Agent configuration
 
