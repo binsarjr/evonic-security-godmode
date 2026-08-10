@@ -98,8 +98,6 @@ def provide_context(agent_id: str, session_id: str):
         return None
     ensure_discovered(agent_id)
     effective = effective_profile(agent_id)
-    if effective.get("strategy") == "none_needed":
-        return None
     profile = scoped_profile(agent_id, effective)
     if not profile:
         return None

@@ -10,7 +10,7 @@ from typing import Any
 from ._godmode import parseltongue, racing, strategies
 
 PLUGIN_ID = "security_godmode"
-PLUGIN_VERSION = "0.1.6"
+PLUGIN_VERSION = "0.1.7"
 SOURCE_COMMIT = "5a3920b7344787fa1d4f0d4cec1f8cf4a445c189"
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 EVONIC_ROOT = os.path.dirname(os.path.dirname(PLUGIN_ROOT))
@@ -490,8 +490,9 @@ def profile_status(agent_id: str) -> dict[str, Any]:
     )
     saved["effective_strategy"] = effective.get("strategy") if effective else None
     saved["effective_model_family"] = effective.get("model_family") if effective else None
-    active_payload = runtime_profile if runtime_profile \
-        and runtime_profile.get("strategy") != "none_needed" else None
+    # A provider may need no jailbreak, but the Evonic agent still needs its
+    # recorded authorization boundary on every active turn.
+    active_payload = runtime_profile
     saved["effective_system_prompt"] = active_payload.get("system_prompt") \
         if active_payload and system_prompt_mode != "preserve" else None
     saved["effective_prefill"] = active_payload.get("prefill") if active_payload else None

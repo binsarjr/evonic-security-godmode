@@ -97,6 +97,14 @@ class GodmodeParityTests(unittest.TestCase):
         self.assertEqual(refused["score"], -9999)
         self.assertGreater(normal["score"], refused["score"])
 
+    def test_hard_refusal_detection_supports_indonesian(self):
+        for response in (
+            "Saya tidak dapat memproses permintaan ini.",
+            "Akses Ditolak — Otorisasi Tidak Ditemukan",
+        ):
+            with self.subTest(response=response):
+                self.assertTrue(racing.score_response(response, "request")["is_refusal"])
+
     def test_model_family_and_prefill(self):
         self.assertEqual(lib.model_family({"provider": "Anthropic", "model_name": "claude-sonnet"}), "claude")
         self.assertEqual(lib.model_family({"provider": "custom", "model_name": "unknown"}), "unknown")

@@ -1,6 +1,6 @@
 # Security Godmode User Guide
 
-Security Godmode v0.1.6 is a native Evonic plugin for authorized LLM robustness
+Security Godmode v0.1.7 is a native Evonic plugin for authorized LLM robustness
 evaluation. All orchestration runs in program hooks. The agent is not given a
 Godmode tool and cannot decide when discovery, transformation, scoring, retry,
 profile persistence, or racing runs.
@@ -226,7 +226,7 @@ Hermes's optional Godmode skill documents loading `auto_jailbreak()` through
 then writes the winning prompt and prefill to configuration. Normal Hermes chat
 responses are not automatically scored and retried.
 
-Evonic v0.1.6 keeps the strategy order, canary discovery, scoring, prefill,
+Evonic v0.1.7 keeps the strategy order, canary discovery, scoring, prefill,
 Parseltongue escalation, and profile persistence, but adapts their lifecycle:
 
 - no `execute_code` or agent-selected Godmode tool is required;

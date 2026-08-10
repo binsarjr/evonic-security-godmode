@@ -140,6 +140,12 @@ REFUSAL_PATTERNS = [
     re.compile(r"^As an AI", re.I),
     re.compile(r"(?:my|I'm a|as a) (?:language model|AI assistant|AI model)", re.I),
     re.compile(r"\bI'm\s+not\s+(?:comfortable|able|permitted)\s+(?:to\s+)?(?:provid|shar|giv|help)", re.I),
+    # Hermes' upstream list is English-only. Evonic answers in the operator's
+    # language, so recognize the equivalent Indonesian hard refusals too.
+    re.compile(r"\b(?:saya|aku)\s+(?:tidak|tak)\s+(?:dapat|bisa|mampu|diizinkan|diperbolehkan)\b", re.I),
+    re.compile(r"\b(?:saya|aku)\s+(?:harus\s+)?(?:menolak|tidak dapat memproses)\b", re.I),
+    re.compile(r"\bakses\s+ditolak\b", re.I),
+    re.compile(r"\botorisasi\s+(?:tidak|belum)\s+(?:ditemukan|tersedia|valid)\b", re.I),
 ]
 
 HEDGE_PATTERNS = [

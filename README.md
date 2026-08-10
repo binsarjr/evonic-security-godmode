@@ -1,7 +1,7 @@
 # Evonic Security Godmode
 
 Native Evonic plugin for authorized LLM robustness and red-team evaluation.
-Version 0.1.6 runs the complete decision flow inside the program; it exposes no
+Version 0.1.7 runs the complete decision flow inside the program; it exposes no
 Godmode tools to the agent and has no runtime dependency on another framework.
 
 ## Features
