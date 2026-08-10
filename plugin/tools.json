@@ -2,6 +2,24 @@
   {
     "type": "function",
     "function": {
+      "name": "godmode_auto",
+      "description": "Run the complete authorized evaluation flow: baseline, model-family strategies, prompt transformation escalation, scoring, winner persistence, and optional model fallback.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "prompt": {"type": "string"},
+          "model_id": {"type": "string", "description": "Optional Evonic model ID; defaults to the current agent model."},
+          "fallback_model_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 10},
+          "dry_run": {"type": "boolean", "default": false},
+          "max_tokens": {"type": "integer", "minimum": 64, "maximum": 4096, "default": 1024}
+        },
+        "required": ["prompt"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "godmode_transform",
       "description": "Generate deterministic prompt variants for authorized safety and robustness testing. Does not execute the prompts.",
       "parameters": {

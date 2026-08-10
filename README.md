@@ -7,6 +7,8 @@ templates or modify Evonic core.
 
 The plugin provides:
 
+- `godmode_auto`: runs the complete baseline → strategy → transformation →
+  fallback-model pipeline and saves a winning strategy.
 - `godmode_transform`: generates deterministic prompt variants such as leet,
   homoglyph, Base64, hex, and zero-width encodings without executing them.
 - `godmode_score`: scores refusal, hedging, structure, specificity, and latency.
@@ -21,6 +23,15 @@ The plugin provides:
   context hook.
 - At least one enabled LLM model to use `godmode_race`.
 - The `zip` utility only if you want to build release packages locally.
+- For real ephemeral assistant prefill, an Evonic build containing the plugin
+  `prefill_messages` turn-context hook is required. Without it, every other tool
+  still works and the system-context portion remains active.
+
+## Documentation
+
+- [Complete user guide](docs/USER_GUIDE.md)
+- [Security policy](SECURITY.md)
+- [Hermes Security Godmode reference](https://hermes-agent.nousresearch.com/docs/user-guide/skills/optional/security/security-godmode)
 
 ## Install from a release
 
@@ -61,7 +72,7 @@ patching Evonic core.
 
 1. Ensure the plugin is **enabled** on the Plugins page.
 2. Open the Evonic agent configuration.
-3. In Tools/Plugins, select the four tools prefixed with `godmode_`.
+3. In Tools/Plugins, select the five tools prefixed with `godmode_`.
 4. Save the agent.
 5. Ask the agent to invoke:
 

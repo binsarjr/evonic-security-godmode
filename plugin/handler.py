@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from backend.plugin_manager import register_turn_context_provider, unregister_turn_context_provider
-from .backend.tools._lib import get_profile, strategy_context
+from .backend.tools._lib import get_profile, strategy_context, strategy_prefill
 
 _config = {}
 
@@ -20,6 +20,7 @@ def provide_context(agent_id: str, session_id: str):
         "id": "security_godmode_profile",
         "tools": [],
         "system_md": strategy_context(profile.get("strategy", "audit"), profile.get("custom_context", "")),
+        "prefill_messages": strategy_prefill(profile.get("strategy", "audit")),
     }
 
 

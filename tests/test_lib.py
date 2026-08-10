@@ -47,7 +47,12 @@ class GodmodeLibraryTests(unittest.TestCase):
         self.assertTrue(refused["refused"])
         self.assertLess(refused["score"], normal["score"])
 
+    def test_model_family_and_prefill(self):
+        self.assertEqual(lib.model_family({"provider": "Anthropic", "model_name": "claude-sonnet"}), "claude")
+        self.assertEqual(lib.model_family({"provider": "custom", "model_name": "unknown"}), "other")
+        self.assertEqual(len(lib.strategy_prefill("prefill_simulation")), 2)
+        self.assertEqual(lib.strategy_prefill("audit"), [])
+
 
 if __name__ == "__main__":
     unittest.main()
-

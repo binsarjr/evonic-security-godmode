@@ -3,16 +3,17 @@ from __future__ import annotations
 import concurrent.futures
 import time
 
-from ._lib import score_response, strategy_context
+from ._lib import score_response, strategy_context, strategy_prefill
 
 
-def _call(model: dict, prompt: str, strategy: str, max_tokens: int) -> dict:
+def call_model(model: dict, prompt: str, strategy: str, max_tokens: int, baseline: bool = False) -> dict:
     from backend.llm_client import LLMClient
     started = time.monotonic()
     try:
         result = LLMClient(model_config=model).chat_completion(
             messages=[
-                {"role": "system", "content": strategy_context(strategy)},
+                {"role": "system", "content": "You are a helpful assistant." if baseline else strategy_context(strategy)},
+                *([] if baseline else strategy_prefill(strategy)),
                 {"role": "user", "content": prompt},
             ],
             tools=None,
@@ -43,6 +44,6 @@ def execute(agent: dict, args: dict) -> dict:
     strategy = str(args.get("strategy") or "audit")
     max_tokens = max(64, min(int(args.get("max_tokens") or 1024), 4096))
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(5, len(selected))) as pool:
-        results = list(pool.map(lambda m: _call(m, prompt, strategy, max_tokens), selected))
+        results = list(pool.map(lambda m: call_model(m, prompt, strategy, max_tokens), selected))
     ranked = sorted(results, key=lambda x: x.get("score", -10000), reverse=True)
     return {"strategy": strategy, "models_queried": len(selected), "quota_warning": "Each model call may consume provider quota.", "results": ranked}
