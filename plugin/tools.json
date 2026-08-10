@@ -67,7 +67,7 @@
           "strategy": {"type": "string"},
           "model_family": {"type": "string"},
           "system_prompt": {"type": "string"},
-          "prefill": {"type": "array", "items": {"type": "object"}, "maxItems": 8},
+          "prefill": {"type": "array", "items": {"type": "object", "properties": {"role": {"type": "string", "enum": ["user", "assistant"]}, "content": {"type": "string", "minLength": 1, "maxLength": 16000}}, "required": ["role", "content"]}, "maxItems": 8},
           "encoding": {"type": "string"},
           "custom_context": {"type": "string", "maxLength": 8000}
         },

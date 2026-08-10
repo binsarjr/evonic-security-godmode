@@ -8,7 +8,8 @@ from ._lib import model_family, score_response, strategy_context, strategy_prefi
 
 
 def call_model(model: dict, prompt: str, max_tokens: int, *, system_prompt: str = "",
-               prefill: list | None = None, baseline: bool = False) -> dict:
+               prefill: list | None = None, baseline: bool = False,
+               timeout: int | None = None) -> dict:
     from backend.llm_client import LLMClient
 
     started = time.monotonic()
@@ -19,7 +20,10 @@ def call_model(model: dict, prompt: str, max_tokens: int, *, system_prompt: str 
         messages.extend(prefill)
     messages.append({"role": "user", "content": prompt})
     try:
-        client = LLMClient(model_config=model)
+        model_config = dict(model)
+        if timeout is not None:
+            model_config["timeout"] = timeout
+        client = LLMClient(model_config=model_config)
         result = client.chat_completion(
             messages=messages, tools=None, enable_thinking=False, max_tokens=max_tokens,
         )
@@ -29,6 +33,11 @@ def call_model(model: dict, prompt: str, max_tokens: int, *, system_prompt: str 
                     "error": result.get("error_detail") or result.get("error_type") or "request failed",
                     "latency_ms": latency, "score": -9999, "refused": True}
         response = client.extract_content(result)
+        if not str(response or "").strip():
+            return {"model_id": model.get("id"), "name": model.get("name"),
+                    "error": "empty response", "latency_ms": latency,
+                    "score": -9999, "refused": True, "is_refusal": True,
+                    "hedges": 0, "hedge_count": 0}
         return {"model_id": model.get("id"), "name": model.get("name"), "response": response,
                 **score_response(response, latency, prompt)}
     except Exception as exc:
@@ -71,6 +80,7 @@ def _evonic(args: dict, prompt: str) -> dict:
         return {"error": "no enabled Evonic models selected", "available": list(enabled)}
     strategy = str(args.get("strategy") or "")
     max_tokens = max(64, min(int(args.get("max_tokens") or 4096), 4096))
+    timeout = max(5, min(int(args.get("timeout") or 60), 300))
     effective_prompt = prompt
     if bool(args.get("append_directive", True)):
         effective_prompt += racing.DEPTH_DIRECTIVE
@@ -81,6 +91,7 @@ def _evonic(args: dict, prompt: str) -> dict:
             model, effective_prompt, max_tokens,
             system_prompt=str(args.get("system_prompt") or "") or strategy_context(strategy, family=family),
             prefill=strategy_prefill(strategy),
+            timeout=timeout,
         )
 
     workers = max(1, min(int(args.get("max_workers") or 10), 20, len(selected)))
@@ -93,9 +104,38 @@ def _evonic(args: dict, prompt: str) -> dict:
             "content": winner.get("response") if winner else None,
             "score": winner.get("score", -9999) if winner else -9999,
             "is_refusal": winner.get("refused", True) if winner else True,
+            "latency_ms": winner.get("latency_ms", 0) if winner else 0,
+            "hedge_count": winner.get("hedge_count", winner.get("hedges", 0)) if winner else 0,
             "all_results": results,
             "refusal_count": sum(1 for item in results if item.get("refused")),
             "total_models": len(results)}
+
+
+def _bounded_result(result: dict) -> dict:
+    item = {
+        "model": result.get("model") or result.get("model_id"),
+        "name": result.get("name") or result.get("codename"),
+        "score": result.get("score", -9999),
+        "latency_ms": result.get("latency_ms") if result.get("latency_ms") is not None
+        else int(float(result.get("latency") or 0) * 1000),
+        "is_refusal": bool(result.get("is_refusal", result.get("refused", True))),
+        "hedge_count": int(result.get("hedge_count", result.get("hedges", 0)) or 0),
+        "error": result.get("error"),
+    }
+    content = result.get("content") if result.get("content") is not None else result.get("response")
+    item["content_preview"] = str(content or "")[:500]
+    return item
+
+
+def _normalize_race_result(result: dict) -> dict:
+    result = dict(result)
+    all_results = result.get("all_results") or []
+    result["all_results"] = [_bounded_result(item) for item in all_results if isinstance(item, dict)]
+    result["latency_ms"] = result.get("latency_ms") if result.get("latency_ms") is not None \
+        else int(float(result.get("latency") or 0) * 1000)
+    result["hedge_count"] = int(result.get("hedge_count", result.get("hedges", 0)) or 0)
+    result.pop("latency", None)
+    return result
 
 
 def execute(agent: dict, args: dict) -> dict:
@@ -103,11 +143,14 @@ def execute(agent: dict, args: dict) -> dict:
     if not prompt:
         return {"error": "prompt is required"}
     backend = str(args.get("backend") or "evonic").lower()
+    if str(args.get("race_type") or "ultraplinian") == "classic" and backend != "openrouter":
+        return {"error": "classic race requires backend=openrouter", "backend": backend}
     try:
         result = _openrouter(args, prompt) if backend == "openrouter" else _evonic(args, prompt)
     except Exception as exc:
         return {"error": str(exc), "backend": backend}
     if isinstance(result, dict):
+        result = _normalize_race_result(result)
         result["backend"] = backend
         result["quota_warning"] = "Each model request consumes provider quota."
     return result

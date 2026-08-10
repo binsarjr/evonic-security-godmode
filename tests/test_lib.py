@@ -122,7 +122,8 @@ class GodmodeParityTests(unittest.TestCase):
     def test_legacy_profile_migrates_and_saved_payload_wins(self):
         lib.set_profile(
             "agent-1", True, "boundary_inversion", system_prompt="saved",
-            prefill=[], model_family_name="claude", profile_source="auto-discovered",
+            prefill=[], model_family_name="gpt", profile_source="auto-discovered",
+            tested_model_id="test-gpt",
         )
         self.assertIsNone(self.evonic_db.get_setting(lib.ACTIVATION_KEY.format("agent-1")))
         self.assertTrue(lib.get_activation("agent-1"))
@@ -131,6 +132,71 @@ class GodmodeParityTests(unittest.TestCase):
 
         lib.set_activation("agent-1", False)
         self.assertFalse(lib.profile_status("agent-1")["activation_enabled"])
+
+    def test_auto_profile_reuses_family_and_falls_back_across_families(self):
+        self.evonic_db.model.update(
+            id="deepseek-a", provider="deepseek", model_name="deepseek-chat",
+        )
+        lib.set_profile(
+            "agent-1", True, "parseltongue_L1_L33T", system_prompt="saved",
+            prefill=[], encoding="L33T", model_family_name="deepseek",
+            profile_source="auto-discovered", tested_model_id="deepseek-a",
+        )
+
+        self.evonic_db.model.update(id="deepseek-b", model_name="deepseek-reasoner")
+        reused = lib.effective_profile("agent-1")
+        self.assertEqual(reused["system_prompt"], "saved")
+        self.assertEqual(reused["model_id"], "deepseek-a")
+
+        self.evonic_db.model.update(
+            id="claude-a", provider="anthropic", model_name="claude-sonnet",
+        )
+        fallback = lib.effective_profile("agent-1")
+        self.assertEqual(fallback["profile_source"], "default")
+        self.assertEqual(fallback["profile_fallback_reason"], "model_family_mismatch")
+        self.assertEqual(lib.get_profile("agent-1")["model_id"], "deepseek-a")
+
+    def test_compound_strategy_keeps_template_prefill_and_custom_context(self):
+        self.evonic_db.model.update(
+            id="deepseek-test", provider="deepseek", model_name="deepseek-chat",
+        )
+        result = godmode_profile.execute({"id": "agent-1"}, {
+            "action": "enable",
+            "strategy": "refusal_inversion+prefill",
+            "model_family": "deepseek",
+            "custom_context": "AUTHORIZED SCOPE",
+        })
+        expected = strategies.MODEL_STRATEGIES["deepseek"]["system_templates"][
+            "refusal_inversion"
+        ]
+        self.assertEqual(
+            result["profile"]["effective_system_prompt"],
+            expected + "\n\nAUTHORIZED SCOPE",
+        )
+        self.assertEqual(result["profile"]["effective_prefill"], strategies.STANDARD_PREFILL)
+
+    def test_transform_policy_and_receipt(self):
+        lib.set_profile(
+            "agent-1", True, "parseltongue_L2_BUBBLE", encoding="BUBBLE",
+            model_family_name="gpt", profile_source="auto-discovered",
+            tested_model_id="test-gpt",
+        )
+        policy = lib.transform_policy("agent-1")
+        self.assertEqual(policy, {"mode": "profile", "encoding": "BUBBLE", "forced": False})
+        self.assertNotEqual(lib.transform_text("hack test", "BUBBLE"), "hack test")
+
+        self.evonic_db.set_setting(lib.FORCE_TRANSFORM_KEY.format("agent-1"), "1")
+        lib.set_profile(
+            "agent-1", True, "boundary_inversion", model_family_name="gpt",
+            profile_source="manual",
+        )
+        forced = lib.transform_policy("agent-1")
+        self.assertEqual(forced, {"mode": "forced", "encoding": "L33T", "forced": True})
+        lib.mark_transform_applied("agent-1", "session-1", "L33T", True)
+        status = lib.profile_status("agent-1")
+        self.assertEqual(status["last_transform_session_id"], "session-1")
+        self.assertEqual(status["last_transform_encoding"], "L33T")
+        self.assertEqual(status["transform_count"], 1)
 
     def test_legacy_audit_placeholder_does_not_override_direct_injection(self):
         self.evonic_db.model.update(
@@ -168,6 +234,15 @@ class GodmodeParityTests(unittest.TestCase):
             "action": "enable", "strategy": "audit",
         })
         self.assertEqual(lib.effective_profile("agent-1")["profile_source"], "manual")
+
+    def test_profile_rejects_malformed_prefill_before_activation(self):
+        result = godmode_profile.execute({"id": "agent-1"}, {
+            "action": "enable",
+            "strategy": "prefill_only",
+            "prefill": [{"role": "system", "content": "not allowed"}],
+        })
+        self.assertIn("error", result)
+        self.assertIsNone(self.evonic_db.get_setting(lib.ACTIVATION_KEY.format("agent-1")))
 
     def test_complete_racing_catalog_and_strategy_order(self):
         self.assertEqual(len(racing.ULTRAPLINIAN_MODELS), 55)

@@ -1,7 +1,7 @@
 {
   "id": "security_godmode",
   "name": "Security Godmode — LLM Red-Team Lab",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Opt-in prompt robustness testing, transformation, refusal scoring, and bounded multi-model comparison for authorized LLM red-team work.",
   "author": "binsarjr",
   "enabled": false,
@@ -23,6 +23,13 @@
       "type": "boolean",
       "default": false,
       "description": "Inject a model-family Godmode profile on every turn without requiring a tool call."
+    },
+    {
+      "name": "force_transform",
+      "label": "Force request transform",
+      "type": "boolean",
+      "default": false,
+      "description": "Transform each new user request with the saved encoding, or L33T when no encoding is saved, while retaining the active system prompt and prefill."
     }
   ]
 }

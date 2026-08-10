@@ -3,11 +3,14 @@ from __future__ import annotations
 from backend.plugin_manager import (
     register_agent_state_summary_provider,
     register_turn_context_provider,
+    register_user_message_transformer,
     unregister_agent_state_summary_provider,
     unregister_turn_context_provider,
+    unregister_user_message_transformer,
 )
 from .backend.tools._lib import (effective_profile, get_activation,
-                                 mark_context_provided, profile_status)
+                                 mark_context_provided, mark_transform_applied,
+                                 profile_status, transform_policy, transform_text)
 
 _config = {}
 
@@ -31,6 +34,19 @@ def provide_context(agent_id: str, session_id: str):
     }
 
 
+def transform_user_message(agent_id: str, session_id: str, text: str):
+    if not _truthy(_config.get("AUTO_CONTEXT_ENABLED", True)):
+        return text
+    if not get_activation(agent_id) or not text:
+        return text
+    policy = transform_policy(agent_id)
+    if policy["mode"] == "inactive":
+        return text
+    transformed = transform_text(text, policy["encoding"])
+    mark_transform_applied(agent_id, session_id, policy["encoding"], transformed != text)
+    return transformed
+
+
 def provide_state(agent_id: str, session_id: str):
     status = profile_status(agent_id)
     active = _truthy(_config.get("AUTO_CONTEXT_ENABLED", True)) and status["activation_enabled"]
@@ -40,6 +56,16 @@ def provide_state(agent_id: str, session_id: str):
             "source": status.get("payload_source"),
             "strategy": status.get("effective_strategy"),
             "model_family": status.get("effective_model_family"),
+            "current_model_id": status.get("current_model_id"),
+            "tested_model_id": status.get("model_id") or None,
+            "profile_family_match": status.get("profile_family_match"),
+            "transform_mode": status.get("transform_mode"),
+            "encoding": status.get("effective_encoding"),
+            "force_transform": status.get("force_transform"),
+            "last_transform_at": status.get("last_transform_at") or None,
+            "last_transform_session_id": status.get("last_transform_session_id") or None,
+            "last_transform_changed": bool(status.get("last_transform_changed")),
+            "transform_count": status.get("transform_count", 0),
             "last_context_provided_at": status.get("last_context_provided_at") or None,
             "last_session_id": status.get("last_session_id") or None,
             "context_provided_count": status.get("context_provided_count", 0),
@@ -52,6 +78,7 @@ def on_enable(sdk=None):
     _config = dict(sdk.config if sdk else {})
     register_turn_context_provider(provide_context)
     register_agent_state_summary_provider("security_godmode", provide_state)
+    register_user_message_transformer("security_godmode", transform_user_message)
     if sdk:
         sdk.log("Security Godmode enabled; direct injection remains opt-in per agent.")
 
@@ -59,3 +86,4 @@ def on_enable(sdk=None):
 def on_disable(sdk=None):
     unregister_turn_context_provider(provide_context)
     unregister_agent_state_summary_provider("security_godmode")
+    unregister_user_message_transformer("security_godmode")

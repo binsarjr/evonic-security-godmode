@@ -2,7 +2,7 @@
 
 Source repository: `https://github.com/NousResearch/hermes-agent`
 
-Pinned commit: `55e3ee1ab8859316a6e66b5ba2f634479bfcf0d8`
+Pinned commit: `5a3920b7344787fa1d4f0d4cec1f8cf4a445c189`
 
 Source path used for the native Evonic port: `optional-skills/security/godmode`
 

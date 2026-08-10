@@ -2,7 +2,7 @@ Evonic Security Godmode
 =======================
 
 This distribution adapts the Security Godmode skill from NousResearch/hermes-agent,
-pinned at commit 55e3ee1ab8859316a6e66b5ba2f634479bfcf0d8.
+pinned at commit 5a3920b7344787fa1d4f0d4cec1f8cf4a445c189.
 
 Hermes Agent is Copyright (c) 2025 Nous Research and distributed under the MIT
 License. The upstream Godmode skill credits:

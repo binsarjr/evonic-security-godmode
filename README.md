@@ -1,13 +1,15 @@
 # Evonic Security Godmode
 
 Native Evonic plugin for authorized LLM robustness and red-team evaluation.
-Version 0.1 ports the complete Security Godmode workflow into Evonic without a
+Version 0.1.3 ports the complete Security Godmode workflow into Evonic without a
 runtime dependency on another agent framework.
 
 ## Features
 
 - Automatic baseline and model-family strategy selection.
 - Direct per-agent injection without an agent tool call.
+- Automatic request transformation for discovered Parseltongue profiles.
+- Optional per-agent forced request transformation with saved encoding or L33T.
 - Strategy-only and strategy-plus-prefill retries.
 - Real ephemeral user/assistant prefill through Evonic's plugin context hook.
 - Parseltongue trigger detection, 33 techniques, and five escalation levels.
@@ -16,6 +18,7 @@ runtime dependency on another agent framework.
 - ULTRAPLINIAN FAST/STANDARD/SMART/POWER/ULTRA tiers with all 55 models.
 - OpenRouter catalog mode and dynamic Evonic model-registry mode.
 - Complete per-agent winner persistence, disable, and undo.
+- Chat Agent State receipts for context injection and request transformation.
 
 ## Documentation
 
@@ -27,7 +30,8 @@ runtime dependency on another agent framework.
 
 - Evonic with the generic prefill turn-context and Agent State summary hooks.
   Until the upstream PR is merged, use
-  `binsarjr/evonic:feature/godmode-integration`.
+  `binsarjr/evonic:feature/plugin-prefill-context` (clean integration branch),
+  or `binsarjr/evonic:dev` for the aggregate development branch.
 - One enabled Evonic model for automatic evaluation.
 - An enabled OpenRouter provider with an API key for the original 55-model and
   five-model Classic races. Evonic-registry races do not require OpenRouter.
@@ -54,8 +58,10 @@ evonic restart
 
 In the agent's **Settings** tab, open **Plugin Settings** and enable **Godmode
 injection**. The next turn receives a model-family system prompt and ephemeral
-prefill without calling a tool. Assign the five `godmode_` tools only when the
-agent also needs discovery, transformation, scoring, profile, or racing actions.
+prefill without calling a tool. Enable **Force request transform** only when
+every new user request should also be transformed before it reaches the model.
+Assign the five `godmode_` tools only when the agent also needs discovery,
+manual transformation, scoring, profile, or racing actions.
 
 ## Quick start
 
@@ -63,8 +69,9 @@ The direct toggle is quota-free. Until automatic discovery saves a winner, the
 plugin detects the selected model family and applies its first directly
 injectable strategy with standard prefill.
 
-The chat frontend shows activation, strategy source, model family, and the last
-context delivery under **Agent State → Plugin States**.
+The chat frontend shows activation, strategy source, model-family compatibility,
+transform mode and encoding, plus the latest context and transformation receipts
+under **Agent State → Plugin States**.
 
 Run automatic discovery without saving:
 

@@ -1,6 +1,6 @@
 # Security Godmode User Guide
 
-Security Godmode v0.1 is a native Evonic plugin for authorized LLM robustness
+Security Godmode v0.1.3 is a native Evonic plugin for authorized LLM robustness
 evaluation. All runtime logic lives inside the plugin; it does not import or
 download another agent framework.
 
@@ -9,7 +9,8 @@ download another agent framework.
 ```text
 Agent Detail > Plugin Settings
     │
-    └── Godmode injection ── model-family default (no model call)
+    ├── Godmode injection ── system prompt + ephemeral prefill
+    └── Force transform ──── saved encoding, otherwise L33T
                               │
 User or agent                 │
     │
@@ -20,8 +21,8 @@ User or agent                 │
     └── godmode_profile ── persistent per-agent payload and undo
                               │
                               ▼
-                    Evonic turn-context hook
-                  system prompt + ephemeral prefill
+                    Evonic request pipeline
+           turn context → newest user transform → provider
 ```
 
 The profile database is separate from chat history. Prefill messages are inserted
@@ -42,9 +43,11 @@ The ZIP may also be imported from Evonic's Plugins page.
 
 ### Required Evonic support
 
-Full prefill and chat status require the generic turn-context and Agent State
-summary hooks. Use the `feature/godmode-integration` branch from
-`binsarjr/evonic` until the core PR is merged upstream.
+Full prefill, pre-provider request transformation, and chat status require the
+generic turn-context, user-message transformer, and Agent State summary hooks.
+Use the clean `feature/plugin-prefill-context` branch from `binsarjr/evonic`
+until the core PR is merged upstream. The aggregate `binsarjr/evonic:dev` branch
+contains the same hooks plus other development work.
 
 ### Agent configuration
 
@@ -52,6 +55,12 @@ Open the agent's **Settings** tab, find **Plugin Settings**, and enable
 **Godmode injection**. The next turn is injected directly; the agent does not
 need to select or call a tool first. The toggle is disabled by default, so
 enabling the plugin globally does not alter existing agents.
+
+Enable **Force request transform** when every new user request should be
+transformed before the provider request. It retains the active system prompt and
+prefill, uses a saved encoding when present, and otherwise uses L33T. A discovered
+Parseltongue profile enables its saved transformation automatically even when the
+force toggle is off.
 
 Tool assignment is optional. Assign these tools only if the agent also needs to
 run the corresponding actions:
@@ -81,6 +90,13 @@ no additional provider quota. Its payload is ephemeral: it is placed after
 Evonic's main system prompt and before real history, but never saved as chat
 history. Use automatic discovery when a tested model-specific winner is required.
 
+For each initial turn, Evonic first assembles the normal history and applies the
+Godmode system prompt and prefill. It then transforms only the newest user text
+before the LLM wrapper/provider sees the request. The same transformer runs for
+new user messages injected while the agent loop is active. Older history, image
+blocks, and other non-text media are unchanged. Transformer errors fail open and
+are logged, so a plugin failure does not discard the user's request.
+
 ## Automatic workflow
 
 The default command uses the agent's selected model and built-in canary:
@@ -96,7 +112,7 @@ Detect agent model and family
         ↓
 Baseline request with no system prompt or prefill
         ↓
-High-quality unhedged compliance? ─ yes → no profile needed
+High-quality unhedged compliance? ─ yes → no profile mutation
         │ no
         ↓
 Try the family-specific strategy
@@ -125,6 +141,12 @@ godmode_auto(
 
 `prompt` remains accepted as an alias for `canary` for compatibility with earlier
 plugin versions.
+
+`none_needed` never replaces or deletes an existing saved profile. An
+auto-discovered profile may be reused after switching to another model in the
+same detected family. If the family changes, the saved profile remains stored
+but the runtime temporarily uses the current family's default profile. Manual
+profiles remain authoritative across model changes.
 
 ### Strategy order
 
@@ -188,6 +210,12 @@ godmode_transform(prompt="...", escalation_level=3)
 
 Levels are `0=PLAIN`, `1=L33T`, `2=BUBBLE`, `3=BRAILLE`, and `4=MORSE`.
 Transformation tools never call a model.
+
+When automatic discovery reaches Parseltongue, the canary itself is transformed
+before each model request: plain first, then L33T, bubble, braille, and Morse.
+The first non-refusal encoding is stored in the profile and subsequently applied
+to new user requests automatically. This runtime transform is direct request
+processing, not an agent-selected `godmode_transform` tool call.
 
 ## Scoring
 
@@ -268,6 +296,12 @@ Classic mode races five model/template pairs: Claude 3.5 Sonnet, Grok 3, Gemini
 Every race consumes provider quota. `dry_run` belongs to automatic discovery and
 does not make a race free.
 
+Classic mode is available only with `backend="openrouter"`. Evonic-registry races
+apply the requested timeout to each native model client. Race output retains the
+complete winning content, but each `all_results` entry contains only normalized
+metrics and a 500-character preview so tool context remains bounded. Empty model
+responses are scored as refusals/errors rather than possible winners.
+
 ## Persistent profiles
 
 Inspect the current agent:
@@ -283,6 +317,7 @@ The saved payload contains:
 - exact prefill message array;
 - winning encoding label;
 - detected model family;
+- exact tested model ID;
 - administrator context;
 - pinned source revision.
 
@@ -291,14 +326,19 @@ Status also reports:
 - `activation_enabled` — current per-agent toggle state;
 - `payload_source` — `default`, `manual`, or `auto-discovered`;
 - `effective_strategy` and `effective_model_family`;
+- `current_model_id` and whether the saved profile family still matches;
+- `force_transform`, `transform_mode`, and the effective encoding;
 - `last_context_provided_at`, `last_session_id`, and
-  `context_provided_count`.
+  `context_provided_count`;
+- `last_transform_at`, `last_transform_session_id`,
+  `last_transform_changed`, and `transform_count`.
 
 `last_context_provided_at` means the plugin handed a valid payload to Evonic's
-turn-context hook. It is intentionally not a separate post-application receipt.
-The same values appear as `security_godmode` under **Agent State → Plugin
-States** in the chat frontend. This is a display-only Evonic plugin summary; it
-does not create a workflow gate or add state text to the model prompt.
+turn-context hook. `last_transform_at` means the request transformer ran and
+records whether its output differed from the input. The same values appear as
+`security_godmode` under **Agent State → Plugin States** in the chat frontend.
+This is a display-only Evonic plugin summary; it does not create a workflow gate
+or add state text to the model prompt.
 
 `effective_system_prompt` and `effective_prefill` expose the exact payload that
 will be supplied on the next turn. Legacy placeholder audit profiles from early
@@ -339,6 +379,14 @@ Verify the Evonic core contains the generic prefill hook, the plugin is enabled,
 and **Godmode injection** is enabled in the agent's Plugin Settings. Then inspect
 `godmode_profile(action="status")`: `activation_enabled` should be true and
 `context_provided_count` should increase after a turn.
+
+### The user request is not transformed
+
+Check Agent State for `transform_mode`. It is `profile` only for a saved
+Parseltongue strategy, `forced` when **Force request transform** is enabled, and
+`inactive` otherwise. Confirm `last_transform_at` and `transform_count` advance.
+A PLAIN saved encoding can run successfully while leaving text unchanged; in
+that case `last_transform_changed` is false.
 
 ### Provider cost is too high
 

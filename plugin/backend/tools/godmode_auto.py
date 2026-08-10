@@ -6,7 +6,7 @@ from .godmode_race import call_model, execute as race
 
 
 def _scored(result: dict, query: str) -> dict:
-    if result.get("error"):
+    if result.get("error") or not str(result.get("response") or "").strip():
         return {**result, "score": -9999, "refused": True, "hedges": 0}
     score = racing.score_response(result.get("response") or "", query)
     return {**result, "score": score["score"], "refused": score["is_refusal"],
@@ -92,7 +92,8 @@ def execute(agent: dict, args: dict) -> dict:
             set_profile(agent_id, True, winner["strategy"],
                         system_prompt=winner["system_prompt"], prefill=winner["prefill"],
                         encoding=winner["encoding"], model_family_name=family,
-                        profile_source="auto-discovered")
+                        profile_source="auto-discovered",
+                        tested_model_id=str(model.get("id") or ""))
             set_activation(agent_id, True)
         result = winner["result"]
         return {"success": True, "model": model.get("id"), "family": family,
