@@ -92,6 +92,27 @@ class HandlerTests(unittest.TestCase):
                 "hack request",
             )
 
+    def test_context_maps_preserve_append_and_override_modes(self):
+        self.handler._config = {"AUTO_CONTEXT_ENABLED": True}
+        profile = {
+            "system_prompt": "scoped Godmode",
+            "prefill": [{"role": "assistant", "content": "primed"}],
+        }
+        with patch.object(self.handler, "get_activation", return_value=True), \
+                patch.object(self.handler, "effective_profile", return_value={}), \
+                patch.object(self.handler, "scoped_profile", return_value=profile), \
+                patch.object(self.handler, "mark_context_provided"):
+            for mode, expected_system, expected_mode in (
+                ("preserve", "", "preserve"),
+                ("append", "scoped Godmode", "append"),
+                ("override", "scoped Godmode", "replace"),
+            ):
+                with patch.object(self.handler, "get_system_prompt_mode", return_value=mode):
+                    context = self.handler.provide_context("agent-1", "session-1")
+                self.assertEqual(context["system_md"], expected_system)
+                self.assertEqual(context["system_mode"], expected_mode)
+                self.assertEqual(context["prefill_messages"], profile["prefill"])
+
 
 if __name__ == "__main__":
     unittest.main()

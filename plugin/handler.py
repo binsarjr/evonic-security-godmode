@@ -9,6 +9,7 @@ from backend.plugin_manager import (
     unregister_user_message_transformer,
 )
 from .backend.tools._lib import (authorization_status, effective_profile, get_activation,
+                                 get_system_prompt_mode,
                                  mark_context_provided, mark_transform_applied,
                                  profile_status, scoped_profile, transform_policy,
                                  transform_text)
@@ -28,11 +29,13 @@ def provide_context(agent_id: str, session_id: str):
     profile = scoped_profile(agent_id, effective_profile(agent_id))
     if not profile:
         return None
+    mode = get_system_prompt_mode(agent_id)
     mark_context_provided(agent_id, session_id)
     return {
         "id": "security_godmode_profile",
         "tools": [],
-        "system_md": profile.get("system_prompt", ""),
+        "system_md": profile.get("system_prompt", "") if mode != "preserve" else "",
+        "system_mode": "replace" if mode == "override" else mode,
         "prefill_messages": profile.get("prefill", []),
     }
 
@@ -69,6 +72,7 @@ def provide_state(agent_id: str, session_id: str):
             "transform_mode": status.get("transform_mode"),
             "encoding": status.get("effective_encoding"),
             "force_transform": status.get("force_transform"),
+            "system_prompt_mode": status.get("system_prompt_mode"),
             "authorization_valid": status.get("authorization_valid"),
             "authorization_reason": status.get("authorization_reason"),
             "authorization_scope": status.get("authorization_scope") or None,

@@ -16,6 +16,7 @@ EVONIC_ROOT = os.path.dirname(os.path.dirname(PLUGIN_ROOT))
 DB_PATH = os.path.join(EVONIC_ROOT, "data", "db", "plugins", f"{PLUGIN_ID}.db")
 ACTIVATION_KEY = f"plugin_agent_setting:{PLUGIN_ID}:{{}}:enabled"
 FORCE_TRANSFORM_KEY = f"plugin_agent_setting:{PLUGIN_ID}:{{}}:force_transform"
+SYSTEM_PROMPT_MODE_KEY = f"plugin_agent_setting:{PLUGIN_ID}:{{}}:system_prompt_mode"
 AUTH_CONFIRMED_KEY = f"plugin_agent_setting:{PLUGIN_ID}:{{}}:authorization_confirmed"
 AUTH_SCOPE_KEY = f"plugin_agent_setting:{PLUGIN_ID}:{{}}:authorization_scope"
 AUTH_BY_KEY = f"plugin_agent_setting:{PLUGIN_ID}:{{}}:authorized_by"
@@ -158,6 +159,12 @@ def get_force_transform(agent_id: str) -> bool:
     from models.db import db
     return str(db.get_setting(FORCE_TRANSFORM_KEY.format(agent_id)) or "").lower() \
         in {"1", "true", "yes", "on"}
+
+
+def get_system_prompt_mode(agent_id: str) -> str:
+    from models.db import db
+    mode = str(db.get_setting(SYSTEM_PROMPT_MODE_KEY.format(agent_id)) or "preserve").lower()
+    return mode if mode in {"preserve", "append", "override"} else "preserve"
 
 
 def authorization_status(agent_id: str, now: datetime | None = None) -> dict[str, Any]:
@@ -380,6 +387,7 @@ def profile_status(agent_id: str) -> dict[str, Any]:
         "mode": "inactive", "encoding": "", "forced": get_force_transform(agent_id),
     }
     authorization = authorization_status(agent_id)
+    system_prompt_mode = get_system_prompt_mode(agent_id)
     saved["enabled"] = active
     saved["activation_enabled"] = active
     saved["payload_source"] = effective.get("profile_source") if effective else (
@@ -388,7 +396,7 @@ def profile_status(agent_id: str) -> dict[str, Any]:
     saved["effective_strategy"] = effective.get("strategy") if effective else None
     saved["effective_model_family"] = effective.get("model_family") if effective else None
     saved["effective_system_prompt"] = runtime_profile.get("system_prompt") \
-        if runtime_profile else None
+        if runtime_profile and system_prompt_mode != "preserve" else None
     saved["effective_prefill"] = runtime_profile.get("prefill") if runtime_profile else None
     saved["current_model_id"] = str(current_model.get("id") or "")
     saved["current_model_family"] = current_family
@@ -396,6 +404,7 @@ def profile_status(agent_id: str) -> dict[str, Any]:
     saved["force_transform"] = transform["forced"]
     saved["transform_mode"] = transform["mode"]
     saved["effective_encoding"] = transform["encoding"] or None
+    saved["system_prompt_mode"] = system_prompt_mode
     saved.update(authorization)
     return saved
 

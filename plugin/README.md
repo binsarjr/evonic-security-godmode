@@ -14,6 +14,9 @@ to every new request while retaining the active context. Tool assignment is
 optional and only required for discovery, manual transform, score, profile, or
 race actions.
 
+**System prompt mode** accepts `preserve` (default; prefill only), `append`, or
+`override` (request-scoped replacement that never writes `SYSTEM.md`).
+
 Documentation:
 https://github.com/binsarjr/evonic-security-godmode/blob/feature/hermes-compatible-flow/docs/USER_GUIDE.md
 

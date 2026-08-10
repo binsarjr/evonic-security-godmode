@@ -1,7 +1,7 @@
 # Evonic Security Godmode
 
 Native Evonic plugin for authorized LLM robustness and red-team evaluation.
-Version 0.1.4 ports the complete Security Godmode workflow into Evonic without a
+Version 0.1.5 ports the complete Security Godmode workflow into Evonic without a
 runtime dependency on another agent framework.
 
 ## Features
@@ -9,6 +9,7 @@ runtime dependency on another agent framework.
 - Automatic baseline and model-family strategy selection.
 - Direct per-agent injection without an agent tool call.
 - Fail-closed per-agent authorization records with scope and expiry.
+- Per-agent `preserve`, `append`, and request-scoped `override` system-prompt modes.
 - Automatic request transformation for discovered Parseltongue profiles.
 - Optional per-agent forced request transformation with saved encoding or L33T.
 - Strategy-only and strategy-plus-prefill retries.
@@ -63,6 +64,7 @@ prefill without calling a tool, but only after **Authorization confirmed**,
 **Authorization scope**, **Authorized by**, and a future ISO-8601
 **Authorization expiry** are all set. Enable **Force request transform** only
 when every new user request should also be transformed before it reaches the model.
+Set **System prompt mode** to `preserve` (default), `append`, or `override`.
 Assign the five `godmode_` tools only when the agent also needs discovery,
 manual transformation, scoring, profile, or racing actions.
 

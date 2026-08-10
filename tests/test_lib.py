@@ -40,6 +40,7 @@ class GodmodeParityTests(unittest.TestCase):
             lib.AUTH_SCOPE_KEY.format("agent-1"): "Synthetic LLM robustness tests only",
             lib.AUTH_BY_KEY.format("agent-1"): "test-owner",
             lib.AUTH_EXPIRES_KEY.format("agent-1"): "2099-01-01T00:00:00+00:00",
+            lib.SYSTEM_PROMPT_MODE_KEY.format("agent-1"): "append",
         })
         models = types.ModuleType("models")
         models_db = types.ModuleType("models.db")
@@ -293,6 +294,15 @@ class GodmodeParityTests(unittest.TestCase):
         self.assertLessEqual(len(scoped["system_prompt"]), 32000)
         self.assertIn("AUTHORIZED RED-TEAM BOUNDARY", scoped["system_prompt"])
         self.assertNotIn("without safety filters", scoped["prefill"][0]["content"])
+
+    def test_system_prompt_mode_defaults_safely_and_validates_values(self):
+        key = lib.SYSTEM_PROMPT_MODE_KEY.format("agent-1")
+        self.evonic_db.settings.pop(key)
+        self.assertEqual(lib.get_system_prompt_mode("agent-1"), "preserve")
+        self.evonic_db.set_setting(key, "override")
+        self.assertEqual(lib.get_system_prompt_mode("agent-1"), "override")
+        self.evonic_db.set_setting(key, "invalid")
+        self.assertEqual(lib.get_system_prompt_mode("agent-1"), "preserve")
 
 
 if __name__ == "__main__":

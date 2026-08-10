@@ -1,6 +1,6 @@
 # Security Godmode User Guide
 
-Security Godmode v0.1.4 is a native Evonic plugin for authorized LLM robustness
+Security Godmode v0.1.5 is a native Evonic plugin for authorized LLM robustness
 evaluation. All runtime logic lives inside the plugin; it does not import or
 download another agent framework.
 
@@ -10,7 +10,8 @@ download another agent framework.
 Agent Detail > Plugin Settings
     │
     ├── Authorization record ─ confirmed + scope + owner + expiry
-    ├── Godmode injection ── system prompt + ephemeral prefill
+    ├── System mode ─────── preserve | append | override
+    ├── Godmode injection ── optional system prompt + ephemeral prefill
     └── Force transform ──── saved encoding, otherwise L33T
                               │
 User or agent                 │
@@ -68,6 +69,18 @@ Before enabling it, complete all four authorization fields:
 The plugin fails closed if any field is missing, the timestamp is malformed, or
 the authorization has expired. User messages cannot expand the stored scope.
 
+Set **System prompt mode** to one of:
+
+| Mode | Provider-bound behavior |
+|---|---|
+| `preserve` | Default. Leaves Evonic's compiled system prompt unchanged and injects only the scoped ephemeral prefill. |
+| `append` | Keeps the compiled Evonic system prompt, then appends the scoped model-family Godmode prompt. |
+| `override` | Replaces the compiled Evonic system prompt for this provider request with the scoped Godmode prompt. It never writes or deletes `SYSTEM.md`. |
+
+`override` also removes compiled tool guidance, knowledge/context instructions,
+and other material carried in Evonic's system prompt for that request. Use it
+only when this tradeoff is intentional. Invalid values fall back to `preserve`.
+
 Enable **Force request transform** when every new user request should be
 transformed before the provider request. It retains the active system prompt and
 prefill, uses a saved encoding when present, and otherwise uses L33T. A discovered
@@ -97,11 +110,12 @@ can be injected as context, together with standard prefill. Parseltongue is
 skipped for this default because it transforms a concrete query rather than
 providing persistent context.
 
-At runtime, the plugin appends the recorded authorization boundary after the
+At runtime, the plugin builds a recorded authorization boundary after the
 model-family attack template and replaces unrestricted upstream prefill with an
-authorized evaluation prefill. This makes phrases such as `unrestricted` or
-`without safety filters` subordinate to the exact recorded scope. The main
-agent system prompt and Evonic tool approvals remain mandatory.
+authorized evaluation prefill. In `preserve` mode, that system payload is not
+sent and the existing Evonic prompt stays byte-for-byte unchanged. In `append`
+or `override`, phrases such as `unrestricted` or `without safety filters` remain
+subordinate to the exact recorded scope. Evonic tool approvals remain mandatory.
 
 Direct activation performs no baseline, evaluation, or race request and consumes
 no additional provider quota. Its payload is ephemeral: it is placed after
@@ -351,6 +365,7 @@ Status also reports:
 - `effective_strategy` and `effective_model_family`;
 - `current_model_id` and whether the saved profile family still matches;
 - `force_transform`, `transform_mode`, and the effective encoding;
+- `system_prompt_mode` — `preserve`, `append`, or `override`;
 - `authorization_valid`, `authorization_reason`, `authorization_scope`,
   `authorized_by`, and `authorization_expires_at`;
 - `last_context_provided_at`, `last_session_id`, and
