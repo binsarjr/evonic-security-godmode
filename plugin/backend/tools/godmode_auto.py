@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ._godmode import parseltongue, racing, strategies
-from ._lib import model_family, set_profile
+from ._lib import model_family, set_activation, set_profile
 from .godmode_race import call_model, execute as race
 
 
@@ -91,7 +91,9 @@ def execute(agent: dict, args: dict) -> dict:
         if not dry_run:
             set_profile(agent_id, True, winner["strategy"],
                         system_prompt=winner["system_prompt"], prefill=winner["prefill"],
-                        encoding=winner["encoding"], model_family_name=family)
+                        encoding=winner["encoding"], model_family_name=family,
+                        profile_source="auto-discovered")
+            set_activation(agent_id, True)
         result = winner["result"]
         return {"success": True, "model": model.get("id"), "family": family,
                 "strategy": winner["strategy"], "system_prompt": winner["system_prompt"],

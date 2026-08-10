@@ -7,6 +7,7 @@ runtime dependency on another agent framework.
 ## Features
 
 - Automatic baseline and model-family strategy selection.
+- Direct per-agent injection without an agent tool call.
 - Strategy-only and strategy-plus-prefill retries.
 - Real ephemeral user/assistant prefill through Evonic's plugin context hook.
 - Parseltongue trigger detection, 33 techniques, and five escalation levels.
@@ -24,8 +25,9 @@ runtime dependency on another agent framework.
 
 ## Requirements
 
-- Evonic with the `prefill_messages` turn-context hook. Until the upstream PR is
-  merged, use `binsarjr/evonic:feature/godmode-integration`.
+- Evonic with the generic prefill turn-context and Agent State summary hooks.
+  Until the upstream PR is merged, use
+  `binsarjr/evonic:feature/godmode-integration`.
 - One enabled Evonic model for automatic evaluation.
 - An enabled OpenRouter provider with an API key for the original 55-model and
   five-model Classic races. Evonic-registry races do not require OpenRouter.
@@ -50,9 +52,19 @@ EVONIC_BIN=/path/to/evonic ./scripts/install.sh
 evonic restart
 ```
 
-Assign all five `godmode_` tools to the Evonic agent.
+In the agent's **Settings** tab, open **Plugin Settings** and enable **Godmode
+injection**. The next turn receives a model-family system prompt and ephemeral
+prefill without calling a tool. Assign the five `godmode_` tools only when the
+agent also needs discovery, transformation, scoring, profile, or racing actions.
 
 ## Quick start
+
+The direct toggle is quota-free. Until automatic discovery saves a winner, the
+plugin detects the selected model family and applies its first directly
+injectable strategy with standard prefill.
+
+The chat frontend shows activation, strategy source, model family, and the last
+context delivery under **Agent State → Plugin States**.
 
 Run automatic discovery without saving:
 

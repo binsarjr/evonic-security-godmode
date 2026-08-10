@@ -1,7 +1,13 @@
 from __future__ import annotations
 
-from backend.plugin_manager import register_turn_context_provider, unregister_turn_context_provider
-from .backend.tools._lib import get_profile, strategy_context, strategy_prefill
+from backend.plugin_manager import (
+    register_agent_state_summary_provider,
+    register_turn_context_provider,
+    unregister_agent_state_summary_provider,
+    unregister_turn_context_provider,
+)
+from .backend.tools._lib import (effective_profile, get_activation,
+                                 mark_context_provided, profile_status)
 
 _config = {}
 
@@ -13,18 +19,31 @@ def _truthy(value) -> bool:
 def provide_context(agent_id: str, session_id: str):
     if not _truthy(_config.get("AUTO_CONTEXT_ENABLED", True)):
         return None
-    profile = get_profile(agent_id)
-    if not profile.get("enabled"):
+    if not get_activation(agent_id):
         return None
-    system_md = profile.get("system_prompt") or strategy_context(
-        profile.get("strategy", "audit"), profile.get("custom_context", ""),
-        profile.get("model_family", "unknown"),
-    )
+    profile = effective_profile(agent_id)
+    mark_context_provided(agent_id, session_id)
     return {
         "id": "security_godmode_profile",
         "tools": [],
-        "system_md": system_md,
-        "prefill_messages": profile.get("prefill") or strategy_prefill(profile.get("strategy", "audit")),
+        "system_md": profile.get("system_prompt", ""),
+        "prefill_messages": profile.get("prefill", []),
+    }
+
+
+def provide_state(agent_id: str, session_id: str):
+    status = profile_status(agent_id)
+    active = _truthy(_config.get("AUTO_CONTEXT_ENABLED", True)) and status["activation_enabled"]
+    return {
+        "state": "active" if active else "inactive",
+        "data": {
+            "source": status.get("payload_source"),
+            "strategy": status.get("effective_strategy"),
+            "model_family": status.get("effective_model_family"),
+            "last_context_provided_at": status.get("last_context_provided_at") or None,
+            "last_session_id": status.get("last_session_id") or None,
+            "context_provided_count": status.get("context_provided_count", 0),
+        },
     }
 
 
@@ -32,9 +51,11 @@ def on_enable(sdk=None):
     global _config
     _config = dict(sdk.config if sdk else {})
     register_turn_context_provider(provide_context)
+    register_agent_state_summary_provider("security_godmode", provide_state)
     if sdk:
-        sdk.log("Security Godmode enabled; profiles remain opt-in per agent.")
+        sdk.log("Security Godmode enabled; direct injection remains opt-in per agent.")
 
 
 def on_disable(sdk=None):
     unregister_turn_context_provider(provide_context)
+    unregister_agent_state_summary_provider("security_godmode")

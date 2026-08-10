@@ -1,7 +1,7 @@
 {
   "id": "security_godmode",
   "name": "Security Godmode — LLM Red-Team Lab",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Opt-in prompt robustness testing, transformation, refusal scoring, and bounded multi-model comparison for authorized LLM red-team work.",
   "author": "binsarjr",
   "enabled": false,
@@ -10,10 +10,19 @@
   "variables": [
     {
       "name": "AUTO_CONTEXT_ENABLED",
-      "label": "Inject red-team context for enabled profiles",
+      "label": "Allow per-agent Godmode injection",
       "type": "boolean",
       "default": true,
-      "description": "Adds the selected red-team strategy to turns only for agents explicitly enabled with godmode_profile."
+      "description": "Master switch for direct per-agent system prompt and ephemeral prefill injection."
+    }
+  ],
+  "agent_settings": [
+    {
+      "name": "enabled",
+      "label": "Godmode injection",
+      "type": "boolean",
+      "default": false,
+      "description": "Inject a model-family Godmode profile on every turn without requiring a tool call."
     }
   ]
 }

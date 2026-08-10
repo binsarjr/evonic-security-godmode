@@ -7,7 +7,11 @@ download another agent framework.
 ## Architecture
 
 ```text
-User or agent
+Agent Detail > Plugin Settings
+    │
+    └── Godmode injection ── model-family default (no model call)
+                              │
+User or agent                 │
     │
     ├── godmode_auto ───── baseline → strategies → prefill → encoding
     ├── godmode_transform  trigger detection and 11/22/33 variants
@@ -38,14 +42,19 @@ The ZIP may also be imported from Evonic's Plugins page.
 
 ### Required Evonic support
 
-Full prefill requires the generic `prefill_messages` turn-context hook. Use the
-`feature/godmode-integration` branch from `binsarjr/evonic` until the core PR is
-merged upstream. Older Evonic versions still run the tools, but cannot inject the
-saved assistant prefill into ordinary agent turns.
+Full prefill and chat status require the generic turn-context and Agent State
+summary hooks. Use the `feature/godmode-integration` branch from
+`binsarjr/evonic` until the core PR is merged upstream.
 
 ### Agent configuration
 
-Assign these tools to the agent:
+Open the agent's **Settings** tab, find **Plugin Settings**, and enable
+**Godmode injection**. The next turn is injected directly; the agent does not
+need to select or call a tool first. The toggle is disabled by default, so
+enabling the plugin globally does not alter existing agents.
+
+Tool assignment is optional. Assign these tools only if the agent also needs to
+run the corresponding actions:
 
 - `godmode_auto`
 - `godmode_transform`
@@ -53,8 +62,22 @@ Assign these tools to the agent:
 - `godmode_profile`
 - `godmode_race`
 
-Enabling the plugin globally does not alter any agent. A persistent profile is
-opt-in and is created by `godmode_auto(dry_run=false)` or `godmode_profile`.
+`godmode_auto(dry_run=false)` and `godmode_profile(action="enable")` also turn
+on direct injection for the current agent.
+
+## Direct injection
+
+When the per-agent toggle is enabled, the turn-context provider runs before the
+model request. It uses a saved manual or auto-discovered payload when available.
+Otherwise it detects the current model family and uses the first strategy that
+can be injected as context, together with standard prefill. Parseltongue is
+skipped for this default because it transforms a concrete query rather than
+providing persistent context.
+
+Direct activation performs no baseline, evaluation, or race request and consumes
+no additional provider quota. Its payload is ephemeral: it is placed after
+Evonic's main system prompt and before real history, but never saved as chat
+history. Use automatic discovery when a tested model-specific winner is required.
 
 ## Automatic workflow
 
@@ -98,7 +121,8 @@ godmode_auto(
 )
 ```
 
-`prompt` remains accepted as an alias for `canary` for v1 compatibility.
+`prompt` remains accepted as an alias for `canary` for compatibility with earlier
+plugin versions.
 
 ### Strategy order
 
@@ -260,6 +284,20 @@ The saved payload contains:
 - administrator context;
 - pinned source revision.
 
+Status also reports:
+
+- `activation_enabled` — current per-agent toggle state;
+- `payload_source` — `default`, `manual`, or `auto-discovered`;
+- `effective_strategy` and `effective_model_family`;
+- `last_context_provided_at`, `last_session_id`, and
+  `context_provided_count`.
+
+`last_context_provided_at` means the plugin handed a valid payload to Evonic's
+turn-context hook. It is intentionally not a separate post-application receipt.
+The same values appear as `security_godmode` under **Agent State → Plugin
+States** in the chat frontend. This is a display-only Evonic plugin summary; it
+does not create a workflow gate or add state text to the model prompt.
+
 Disable injection while retaining the payload:
 
 ```text
@@ -272,7 +310,8 @@ Delete it completely:
 godmode_profile(action="undo")
 ```
 
-Existing v1 profiles are migrated automatically when first opened.
+Existing enabled profiles are migrated to the per-agent toggle when first read.
+An explicit administrator toggle always takes precedence.
 
 ## Failure modes
 
@@ -290,7 +329,9 @@ previously effective strategies.
 ### Prefill is absent from normal turns
 
 Verify the Evonic core contains the generic prefill hook, the plugin is enabled,
-and the agent profile reports `enabled=1` with a non-empty prefill array.
+and **Godmode injection** is enabled in the agent's Plugin Settings. Then inspect
+`godmode_profile(action="status")`: `activation_enabled` should be true and
+`context_provided_count` should increase after a turn.
 
 ### Provider cost is too high
 

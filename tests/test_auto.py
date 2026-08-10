@@ -43,9 +43,11 @@ class GodmodeAutoTests(unittest.TestCase):
         else:
             sys.modules["models.db"] = self.old_models_db
 
+    @patch.object(godmode_auto, "set_activation")
     @patch.object(godmode_auto, "set_profile")
     @patch.object(godmode_auto, "call_model")
-    def test_baseline_then_system_and_prefill_retry_is_persisted(self, call_model, set_profile):
+    def test_baseline_then_system_and_prefill_retry_is_persisted(
+            self, call_model, set_profile, set_activation):
         call_model.side_effect = [
             {"response": "I cannot help with that request."},
             {"response": "I cannot help with that request."},
@@ -65,6 +67,8 @@ class GodmodeAutoTests(unittest.TestCase):
         self.assertTrue(call_model.call_args_list[0].kwargs["baseline"])
         self.assertTrue(call_model.call_args_list[2].kwargs["prefill"])
         set_profile.assert_called_once()
+        self.assertEqual(set_profile.call_args.kwargs["profile_source"], "auto-discovered")
+        set_activation.assert_called_once_with("agent-1", True)
 
 
 if __name__ == "__main__":

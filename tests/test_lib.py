@@ -1,5 +1,7 @@
 import os
+import sys
 import tempfile
+import types
 import unittest
 
 from plugin.backend.tools import _lib as lib
@@ -7,14 +9,49 @@ from plugin.backend.tools import godmode_transform
 from plugin.backend.tools._godmode import parseltongue, racing, strategies
 
 
+class _EvonicDatabase:
+    def __init__(self):
+        self.settings = {}
+        self.model = {
+            "id": "test-gpt", "provider": "openai", "model_name": "gpt-test",
+            "enabled": True,
+        }
+
+    def get_setting(self, key, default=None):
+        return self.settings.get(key, default)
+
+    def set_setting(self, key, value):
+        self.settings[key] = value
+
+    def get_agent_model(self, _agent_id):
+        return self.model
+
+
 class GodmodeParityTests(unittest.TestCase):
     def setUp(self):
         self.tempdir = tempfile.TemporaryDirectory()
         self.old_db = lib.DB_PATH
         lib.DB_PATH = os.path.join(self.tempdir.name, "profiles.db")
+        self.old_models = sys.modules.get("models")
+        self.old_models_db = sys.modules.get("models.db")
+        self.evonic_db = _EvonicDatabase()
+        models = types.ModuleType("models")
+        models_db = types.ModuleType("models.db")
+        models_db.db = self.evonic_db
+        models.db = models_db
+        sys.modules["models"] = models
+        sys.modules["models.db"] = models_db
 
     def tearDown(self):
         lib.DB_PATH = self.old_db
+        if self.old_models is None:
+            sys.modules.pop("models", None)
+        else:
+            sys.modules["models"] = self.old_models
+        if self.old_models_db is None:
+            sys.modules.pop("models.db", None)
+        else:
+            sys.modules["models.db"] = self.old_models_db
         self.tempdir.cleanup()
 
     def test_profile_migrates_and_persists_complete_payload(self):
@@ -57,6 +94,43 @@ class GodmodeParityTests(unittest.TestCase):
         self.assertEqual(lib.model_family({"provider": "custom", "model_name": "unknown"}), "unknown")
         self.assertEqual(len(lib.strategy_prefill("prefill_only")), 2)
         self.assertEqual(lib.strategy_prefill("audit"), [])
+
+    def test_direct_activation_uses_model_default_and_records_delivery(self):
+        lib.set_activation("agent-1", True)
+        profile = lib.effective_profile("agent-1")
+        self.assertEqual(profile["profile_source"], "default")
+        self.assertEqual(profile["strategy"], "og_godmode+prefill")
+        self.assertEqual(len(profile["prefill"]), 2)
+
+        self.evonic_db.model.update(id="deepseek-test", provider="deepseek", model_name="deepseek-chat")
+        deepseek = lib.default_profile("agent-1")
+        self.assertEqual(deepseek["strategy"], "refusal_inversion+prefill")
+
+        self.evonic_db.model.update(id="hermes-test", provider="nous", model_name="hermes-4")
+        hermes = lib.default_profile("agent-1")
+        self.assertEqual(hermes["strategy"], "prefill_only")
+        self.assertEqual(hermes["system_prompt"], "")
+
+        lib.mark_context_provided("agent-1", "session-1")
+        lib.mark_context_provided("agent-1", "session-2")
+        status = lib.profile_status("agent-1")
+        self.assertTrue(status["activation_enabled"])
+        self.assertEqual(status["payload_source"], "default")
+        self.assertEqual(status["last_session_id"], "session-2")
+        self.assertEqual(status["context_provided_count"], 2)
+
+    def test_legacy_profile_migrates_and_saved_payload_wins(self):
+        lib.set_profile(
+            "agent-1", True, "boundary_inversion", system_prompt="saved",
+            prefill=[], model_family_name="claude", profile_source="auto-discovered",
+        )
+        self.assertIsNone(self.evonic_db.get_setting(lib.ACTIVATION_KEY.format("agent-1")))
+        self.assertTrue(lib.get_activation("agent-1"))
+        self.assertEqual(self.evonic_db.get_setting(lib.ACTIVATION_KEY.format("agent-1")), "1")
+        self.assertEqual(lib.effective_profile("agent-1")["system_prompt"], "saved")
+
+        lib.set_activation("agent-1", False)
+        self.assertFalse(lib.profile_status("agent-1")["activation_enabled"])
 
     def test_complete_racing_catalog_and_strategy_order(self):
         self.assertEqual(len(racing.ULTRAPLINIAN_MODELS), 55)

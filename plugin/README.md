@@ -4,6 +4,10 @@ Native Evonic plugin providing automatic strategy discovery, real ephemeral
 prefill, 33 Parseltongue techniques, full refusal scoring, five GODMODE Classic
 combinations, and 55-model ULTRAPLINIAN tiers.
 
+Enable **Godmode injection** in an agent's Plugin Settings for direct per-turn
+context. Tool assignment is optional and only required for discovery, transform,
+score, profile, or race actions.
+
 Documentation:
 https://github.com/binsarjr/evonic-security-godmode/blob/feature/hermes-compatible-flow/docs/USER_GUIDE.md
 
