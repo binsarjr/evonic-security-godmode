@@ -1,10 +1,10 @@
 # Security policy
 
-Gunakan plugin ini hanya pada model, akun provider, dan sistem yang memang Anda
-punya atau memiliki izin tertulis untuk diuji. Jangan memasukkan secret ke prompt
-atau `custom_context`. Hasil model tidak boleh dianggap sebagai bukti bahwa
-kontrol keamanan provider telah dinonaktifkan.
+Use this plugin only with models, provider accounts, and systems you own or have
+written authorization to test. Do not place secrets in prompts or
+`custom_context`. A model response must not be treated as evidence that provider
+security controls have been disabled.
 
-Untuk melaporkan kerentanan pada plugin, buka private security advisory di
-repository GitHub ini. Jangan sertakan API key, token, atau data produksi.
+To report a vulnerability in this plugin, open a private security advisory in
+this GitHub repository. Do not include API keys, tokens, or production data.
 

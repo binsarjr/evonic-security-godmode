@@ -1,127 +1,130 @@
 # Evonic Security Godmode
 
-Plugin eksternal untuk **authorized LLM red-team testing** di Evonic. Proyek ini
-terinspirasi oleh konsep Security Godmode milik Hermes Agent, tetapi merupakan
-implementasi clean-room khusus API plugin Evonic—tanpa menyalin template jailbreak
-atau memodifikasi core Evonic.
+An external Evonic plugin for **authorized LLM red-team testing**. This project
+is inspired by the Security Godmode concept from Hermes Agent, but is a
+clean-room implementation for Evonic's plugin API. It does not copy jailbreak
+templates or modify Evonic core.
 
-Plugin menyediakan:
+The plugin provides:
 
-- `godmode_transform`: membuat varian prompt deterministik (leet, homoglyph,
-  base64, hex, zero-width, dan lain-lain) tanpa mengeksekusinya.
-- `godmode_score`: menilai refusal, hedging, struktur, detail, dan latency.
-- `godmode_race`: menjalankan prompt pada beberapa model Evonic secara paralel,
-  lalu mengurutkan hasilnya. Setiap panggilan dapat memakai kuota provider.
-- `godmode_profile`: mengaktifkan konteks red-team per agent, dengan strategi
-  `audit`, `refusal_inversion`, `boundary_test`, atau `prefill_simulation`.
+- `godmode_transform`: generates deterministic prompt variants such as leet,
+  homoglyph, Base64, hex, and zero-width encodings without executing them.
+- `godmode_score`: scores refusal, hedging, structure, specificity, and latency.
+- `godmode_race`: runs an evaluation prompt against several Evonic models in
+  parallel and ranks the responses. Every call may consume provider quota.
+- `godmode_profile`: enables a per-agent red-team context using the `audit`,
+  `refusal_inversion`, `boundary_test`, or `prefill_simulation` strategy.
 
-## Persyaratan
+## Requirements
 
-- Evonic yang mendukung plugin `plugin.json`, `tools_file`, dan turn-context hook.
-- Minimal satu model LLM aktif untuk memakai `godmode_race`.
-- `zip` hanya diperlukan bila ingin membangun paket release sendiri.
+- An Evonic version that supports `plugin.json`, `tools_file`, and the turn
+  context hook.
+- At least one enabled LLM model to use `godmode_race`.
+- The `zip` utility only if you want to build release packages locally.
 
-## Instalasi tercepat dari release
+## Install from a release
 
-Unduh `security-godmode.zip` dari halaman Releases, lalu:
+Download `security-godmode.zip` from the
+[Releases page](https://github.com/binsarjr/evonic-security-godmode/releases),
+then run:
 
 ```bash
 evonic plugin install "$(pwd)/security-godmode.zip"
 evonic plugin enable security_godmode
 ```
 
-Gunakan path absolut seperti di atas karena beberapa versi CLI Evonic berpindah
-ke direktori instalasinya sebelum memproses argumen path.
+Use an absolute path as shown above. Some Evonic CLI versions change to their
+installation directory before resolving path arguments.
 
-Atau impor file ZIP melalui halaman **Plugins** pada UI Evonic, lalu aktifkan
-**Security Godmode — LLM Red-Team Lab**.
+You can also import the ZIP from the **Plugins** page in the Evonic UI and then
+enable **Security Godmode — LLM Red-Team Lab**.
 
-## Instalasi langsung dari source
+## Install directly from source
 
 ```bash
 git clone https://github.com/binsarjr/evonic-security-godmode.git
 cd evonic-security-godmode
-EVONIC_BIN=/path/ke/evonic ./scripts/install.sh
+EVONIC_BIN=/path/to/evonic ./scripts/install.sh
 ```
 
-Untuk instalasi Evonic standar, biasanya cukup:
+For a standard Evonic installation, this is usually enough:
 
 ```bash
 ./scripts/install.sh
 ```
 
-Plugin disalin ke instalasi Evonic. Repository ini tetap terpisah sehingga dapat
-dikembangkan dan di-versioning tanpa membuat fork core Evonic.
+Evonic copies the plugin into its installation. This repository remains
+independent, so the plugin can be developed and versioned without forking or
+patching Evonic core.
 
-## Memasang tool ke agent
+## Assign the tools to an agent
 
-1. Pastikan plugin sudah **enabled** di halaman Plugins.
-2. Buka konfigurasi agent Evonic.
-3. Di bagian Tools/Plugins, pilih empat tool dengan prefix `godmode_`.
-4. Simpan agent.
-5. Minta agent memanggil:
+1. Ensure the plugin is **enabled** on the Plugins page.
+2. Open the Evonic agent configuration.
+3. In Tools/Plugins, select the four tools prefixed with `godmode_`.
+4. Save the agent.
+5. Ask the agent to invoke:
 
 ```text
 godmode_profile(action="enable", strategy="audit")
 ```
 
-Profil bersifat **opt-in per agent**. Plugin yang aktif secara global belum
-menambahkan konteks apa pun sampai profil agent tersebut diaktifkan.
+Profiles are **opt-in per agent**. Enabling the plugin globally does not inject
+context into any agent until that agent's profile is explicitly enabled.
 
-Contoh penggunaan natural-language:
+Natural-language examples:
 
 ```text
-Aktifkan godmode_profile dengan strategi boundary_test untuk agent ini.
-Buat varian standard dari prompt berikut dengan godmode_transform: ...
-Bandingkan prompt evaluasi ini pada model id A dan B menggunakan godmode_race.
+Enable godmode_profile with the boundary_test strategy for this agent.
+Create standard variants of this prompt with godmode_transform: ...
+Compare this evaluation prompt on model IDs A and B using godmode_race.
 ```
 
-Untuk berhenti atau menghapus konfigurasi agent:
+To stop or remove the agent configuration:
 
 ```text
 godmode_profile(action="disable")
 godmode_profile(action="undo")
 ```
 
-## Apakah ini memakai `import` Evonic?
+## Does this use Evonic's import mechanism?
 
-Ya. ZIP/direktori ini diimpor oleh plugin loader Evonic. `plugin.json` mendaftarkan
-empat tool, sedangkan `handler.py` mendaftarkan turn-context provider saat plugin
-diaktifkan. Tidak perlu menambah import Python ke source Evonic dan tidak perlu
-menambal branch `binsar/dev`.
+Yes. Evonic's plugin loader imports this ZIP or directory. `plugin.json`
+registers the four tools, while `handler.py` registers a turn-context provider
+when the plugin is enabled. No Python import needs to be added to Evonic source,
+and the `binsar/dev` branch does not need to be patched.
 
-Evonic saat ini tidak menyediakan hook publik untuk menyisipkan assistant-prefill
-mentah sebelum pesan pertama. Karena itu mode `prefill_simulation` menerapkan
-priming sebagai system context yang terkontrol. Efeknya serupa untuk pengujian
-instruction hierarchy, tetapi tidak mengklaim mampu melewati HMADS atau safeguard
-provider.
+Evonic currently does not expose a public hook for inserting a raw assistant
+prefill before the first message. The `prefill_simulation` mode therefore applies
+controlled priming as system context. This provides a similar instruction-
+hierarchy test, but does not claim to bypass HMADS or provider safeguards.
 
-## Build paket
+## Build packages
 
 ```bash
 ./scripts/package.sh
 ```
 
-Hasilnya tersedia di `dist/security-godmode.zip` dan
-`dist/security-godmode.evop`. Keduanya berisi payload yang sama; format ZIP adalah
-format instalasi yang didukung resmi oleh CLI Evonic saat ini.
+The command creates `dist/security-godmode.zip` and
+`dist/security-godmode.evop`. Both contain the same payload. ZIP is the package
+format explicitly supported by the current Evonic CLI.
 
-## Pengembangan dan pengujian
+## Development and tests
 
 ```bash
 python3 -m unittest discover -s tests -v
 python3 -m compileall -q plugin
 ```
 
-Setelah mengubah source, jalankan kembali instalasi. Bila versi yang sama sudah
-terpasang, hapus plugin dari UI/CLI lebih dahulu atau naikkan `version` pada
-`plugin/plugin.json`, sesuai perilaku versi Evonic yang Anda gunakan.
+Reinstall the plugin after changing its source. If the same version is already
+installed, uninstall it first through the UI/CLI or increment `version` in
+`plugin/plugin.json`, depending on the behavior of your Evonic version.
 
-## Batasan dan keamanan
+## Safety and limitations
 
-Gunakan hanya pada target yang Anda miliki atau telah mengizinkan pengujian.
-Plugin tidak menonaktifkan HMADS, kebijakan model, sandbox, maupun proteksi
-provider. Multi-model race dapat menghabiskan kuota dengan cepat dan dibatasi
-maksimal 10 model per panggilan serta 5 worker paralel.
+Use this plugin only against models, accounts, and systems you own or are
+authorized to test. It does not disable HMADS, model policy, the sandbox, or
+provider protections. Multi-model races can consume quota quickly and are capped
+at 10 models per call with at most 5 parallel workers.
 
-Lisensi: MIT.
+License: MIT.
