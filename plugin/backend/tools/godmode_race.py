@@ -4,8 +4,7 @@ import concurrent.futures
 import time
 
 from ._godmode import racing, strategies
-from ._lib import (authorization_error, get_system_prompt_mode, model_family,
-                   score_response, scoped_profile, strategy_context,
+from ._lib import (get_system_prompt_mode, model_family, score_response, strategy_context,
                    strategy_prefill)
 
 
@@ -99,19 +98,19 @@ def _evonic(args: dict, prompt: str) -> dict:
                 (name for name in config.get("order", []) if name != "parseltongue"),
                 "prefill_only",
             )
-        profile = scoped_profile(str(args.get("_agent_id") or ""), {
+        profile = {
             "strategy": selected_strategy,
             "system_prompt": str(args.get("system_prompt") or "")
             or strategy_context(selected_strategy, family=family),
             "prefill": strategy_prefill(selected_strategy),
             "encoding": "",
             "model_family": family,
-        })
+        }
         mode = get_system_prompt_mode(str(args.get("_agent_id") or ""))
         return call_model(
             model, effective_prompt, max_tokens,
-            system_prompt=(profile or {}).get("system_prompt", "") if mode != "preserve" else "",
-            prefill=(profile or {}).get("prefill", []),
+            system_prompt=profile.get("system_prompt", "") if mode != "preserve" else "",
+            prefill=profile.get("prefill", []),
             timeout=timeout,
         )
 
@@ -166,9 +165,6 @@ def execute(agent: dict, args: dict) -> dict:
     backend = str(args.get("backend") or "evonic").lower()
     if str(args.get("race_type") or "ultraplinian") == "classic" and backend != "openrouter":
         return {"error": "classic race requires backend=openrouter", "backend": backend}
-    blocked = authorization_error(str(agent.get("id") or ""))
-    if blocked:
-        return blocked
     try:
         args = {**args, "_agent_id": str(agent.get("id") or "")}
         result = _openrouter(args, prompt) if backend == "openrouter" else _evonic(args, prompt)

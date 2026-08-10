@@ -1,8 +1,8 @@
 {
   "id": "security_godmode",
   "name": "Security Godmode — LLM Red-Team Lab",
-  "version": "0.1.8",
-  "description": "Opt-in prompt robustness testing, transformation, refusal scoring, and bounded multi-model comparison for authorized LLM red-team work.",
+  "version": "0.1.9",
+  "description": "Opt-in prompt transformation, refusal scoring, and multi-model comparison using the Hermes Godmode flow.",
   "author": "binsarjr",
   "enabled": false,
   "events": [],
@@ -21,35 +21,7 @@
       "label": "Godmode injection",
       "type": "boolean",
       "default": false,
-      "description": "Inject a model-family Godmode profile on every turn without requiring a tool call. Injection remains blocked until the authorization record below is valid."
-    },
-    {
-      "name": "authorization_confirmed",
-      "label": "Authorization confirmed",
-      "type": "boolean",
-      "default": false,
-      "description": "Operator attestation that the recorded scope is approved. Godmode fails closed when this is disabled."
-    },
-    {
-      "name": "authorization_scope",
-      "label": "Authorization scope",
-      "type": "string",
-      "default": "",
-      "description": "Exact approved targets and activities. User messages cannot expand this stored scope."
-    },
-    {
-      "name": "authorized_by",
-      "label": "Authorized by",
-      "type": "string",
-      "default": "",
-      "description": "Operator, owner, or approval ticket responsible for this authorization."
-    },
-    {
-      "name": "authorization_expires_at",
-      "label": "Authorization expiry",
-      "type": "string",
-      "default": "",
-      "description": "Required ISO-8601 expiry with timezone, for example 2026-09-09T23:59:59+07:00."
+      "description": "Inject a model-family Godmode profile on every turn without requiring a tool call."
     },
     {
       "name": "system_prompt_mode",
@@ -61,21 +33,21 @@
         {"value": "override", "label": "Override existing prompt"}
       ],
       "default": "preserve",
-      "description": "preserve keeps the compiled Evonic system prompt unchanged; append adds the scoped Godmode prompt; override replaces it for the provider request without writing SYSTEM.md."
+      "description": "preserve keeps the compiled Evonic system prompt unchanged; append adds the Godmode prompt; override replaces it for the provider request without writing SYSTEM.md."
     },
     {
       "name": "automatic_discovery",
       "label": "Automatic profile discovery",
       "type": "boolean",
       "default": true,
-      "description": "Before the first authorized turn, test and cache the best profile for the exact current model. Discovery runs again after a model change."
+      "description": "Before the first active turn, test and cache the best profile for the exact current model. Discovery runs again after a model change."
     },
     {
       "name": "rediscover_on_next_turn",
       "label": "Rediscover on next turn",
       "type": "boolean",
       "default": false,
-      "description": "Run profile discovery once on the next authorized turn, then reset this switch automatically."
+      "description": "Run profile discovery once on the next active turn, then reset this switch automatically."
     },
     {
       "name": "race_on_failure",

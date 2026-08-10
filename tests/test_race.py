@@ -126,9 +126,6 @@ class GodmodeRaceTests(unittest.TestCase):
         sys.modules["models.db"] = models_db
         try:
             with patch.object(
-                    godmode_race, "scoped_profile",
-                    return_value={"system_prompt": "scoped", "prefill": []},
-                ), patch.object(
                     godmode_race, "get_system_prompt_mode", return_value="append",
                 ), patch.object(
                     godmode_race, "call_model",

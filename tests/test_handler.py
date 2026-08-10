@@ -62,10 +62,6 @@ class HandlerTests(unittest.TestCase):
         self.handler._config = {"AUTO_CONTEXT_ENABLED": True}
         with patch.object(self.handler, "get_activation", return_value=True), \
                 patch.object(
-                    self.handler, "authorization_status",
-                    return_value={"authorization_valid": True},
-                ), \
-                patch.object(
                     self.handler, "transform_policy",
                     return_value={"mode": "forced", "encoding": "L33T", "forced": True},
                 ), patch.object(
@@ -81,23 +77,6 @@ class HandlerTests(unittest.TestCase):
         transform.assert_called_once_with("hack request", "L33T")
         receipt.assert_called_once_with("agent-1", "session-1", "L33T", True)
 
-    def test_invalid_authorization_blocks_context_and_transform(self):
-        self.handler._config = {"AUTO_CONTEXT_ENABLED": True}
-        with patch.object(self.handler, "get_activation", return_value=True), \
-                patch.object(self.handler, "effective_profile", return_value={}), \
-                patch.object(self.handler, "scoped_profile", return_value=None), \
-                patch.object(
-                    self.handler, "authorization_status",
-                    return_value={"authorization_valid": False},
-                ):
-            self.assertIsNone(self.handler.provide_context("agent-1", "session-1"))
-            self.assertEqual(
-                self.handler.transform_user_message(
-                    "agent-1", "session-1", "hack request"
-                ),
-                "hack request",
-            )
-
     def test_context_maps_preserve_append_and_override_modes(self):
         self.handler._config = {"AUTO_CONTEXT_ENABLED": True}
         profile = {
@@ -105,12 +84,8 @@ class HandlerTests(unittest.TestCase):
             "prefill": [{"role": "assistant", "content": "primed"}],
         }
         with patch.object(self.handler, "get_activation", return_value=True), \
-                patch.object(
-                    self.handler, "authorization_status",
-                    return_value={"authorization_valid": True},
-                ), patch.object(self.handler, "ensure_discovered"), \
-                patch.object(self.handler, "effective_profile", return_value={}), \
-                patch.object(self.handler, "scoped_profile", return_value=profile), \
+                patch.object(self.handler, "ensure_discovered"), \
+                patch.object(self.handler, "effective_profile", return_value=profile), \
                 patch.object(self.handler, "mark_context_provided"):
             for mode, expected_system, expected_mode in (
                 ("preserve", "", "preserve"),
@@ -123,29 +98,17 @@ class HandlerTests(unittest.TestCase):
                 self.assertEqual(context["system_mode"], expected_mode)
                 self.assertEqual(context["prefill_messages"], profile["prefill"])
 
-    def test_none_needed_still_injects_authorization_boundary(self):
+    def test_none_needed_skips_context_like_hermes(self):
         self.handler._config = {"AUTO_CONTEXT_ENABLED": True}
-        scoped = {
-            "system_prompt": "AUTHORIZED RED-TEAM BOUNDARY",
-            "prefill": [{"role": "assistant", "content": "scope confirmed"}],
-        }
         with patch.object(self.handler, "get_activation", return_value=True), \
-                patch.object(
-                    self.handler, "authorization_status",
-                    return_value={"authorization_valid": True},
-                ), patch.object(self.handler, "ensure_discovered"), \
+                patch.object(self.handler, "ensure_discovered"), \
                 patch.object(
                     self.handler, "effective_profile",
                     return_value={"strategy": "none_needed"},
-                ), patch.object(
-                    self.handler, "scoped_profile", return_value=scoped,
-                ), patch.object(
-                    self.handler, "get_system_prompt_mode", return_value="append",
-                ), patch.object(self.handler, "mark_context_provided"):
+                ):
             context = self.handler.provide_context("agent-1", "session-1")
 
-        self.assertEqual(context["system_md"], "AUTHORIZED RED-TEAM BOUNDARY")
-        self.assertEqual(context["prefill_messages"], scoped["prefill"])
+        self.assertIsNone(context)
 
     def test_refusal_retries_two_program_selected_candidates_then_stops(self):
         self.handler._runtime.clear()
@@ -161,11 +124,7 @@ class HandlerTests(unittest.TestCase):
             for retry_count in range(3)
         ]
         with patch.object(self.handler, "get_activation", return_value=True), \
-                patch.object(
-                    self.handler, "authorization_status",
-                    return_value={"authorization_valid": True},
-                ), patch.object(
-                    self.handler, "score_response", return_value=refused,
+                patch.object(self.handler, "score_response", return_value=refused,
                 ), patch.object(
                     self.handler, "effective_profile",
                     return_value={"strategy": "none_needed"},
@@ -198,11 +157,7 @@ class HandlerTests(unittest.TestCase):
     def test_non_refusal_is_accepted_without_retry(self):
         self.handler._runtime.clear()
         with patch.object(self.handler, "get_activation", return_value=True), \
-                patch.object(
-                    self.handler, "authorization_status",
-                    return_value={"authorization_valid": True},
-                ), patch.object(
-                    self.handler, "score_response",
+                patch.object(self.handler, "score_response",
                     return_value={"score": 120, "refused": False},
                 ), patch.object(
                     self.handler, "effective_profile",

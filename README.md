@@ -1,18 +1,17 @@
 # Evonic Security Godmode
 
-Native Evonic plugin for authorized LLM robustness and red-team evaluation.
-Version 0.1.8 runs the complete decision flow inside the program; it exposes no
+Native Evonic plugin for the Hermes Godmode prompt flow.
+Version 0.1.9 runs the complete decision flow inside the program; it exposes no
 Godmode tools to the agent and has no runtime dependency on another framework.
 
 ## Features
 
-- Blocking profile discovery on the first authorized turn and after model changes.
+- Blocking profile discovery on the first active turn and after model changes.
 - Program-selected model-family strategies, prefill, and Parseltongue encoding.
 - Pre-provider transformation of only the newest user message.
 - Pre-final refusal scoring and up to two invisible progressive retries.
 - Optional operator-controlled race across ten other enabled Evonic models.
 - Exact-model profile caching, manual refresh, and additive runtime receipts.
-- Fail-closed authorization with exact scope, approver, and expiry.
 - `preserve`, `append`, and request-scoped `override` system-prompt modes.
 - Agent State visibility for discovery, injection, transformation, retries, and race.
 - No writes to an agent's `SYSTEM.md`.
@@ -51,8 +50,8 @@ EVONIC_BIN=/path/to/evonic ./scripts/install.sh
 evonic restart
 ```
 
-In **Agent Settings → Plugin Settings**, complete the authorization record and
-enable **Godmode injection**. The next turn performs discovery before the normal
+In **Agent Settings → Plugin Settings**, enable **Godmode injection**. The next
+turn performs discovery before the normal
 provider request. Leave **System prompt mode** at `preserve` to keep the compiled
 Evonic prompt unchanged. **Race models after retries fail** is disabled by
 default because every raced model consumes quota.
@@ -60,9 +59,9 @@ default because every raced model consumes quota.
 The agent never selects or invokes a Godmode tool. The program applies this flow:
 
 ```text
-authorization → cached discovery/profile → context + request transform
-              → provider → refusal score → at most two retries
-              → optional ten-model Evonic race → one visible final response
+cached discovery/profile → context + request transform → provider
+                         → refusal score → at most two retries
+                         → optional ten-model Evonic race → one visible final response
 ```
 
 Hermes's optional skill starts `auto_jailbreak()` through `execute_code`; this

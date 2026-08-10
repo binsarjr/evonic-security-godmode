@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ._godmode import parseltongue, racing, strategies
-from ._lib import authorization_error, model_family, set_activation, set_profile
+from ._lib import model_family, set_activation, set_profile
 from .godmode_race import call_model, execute as race
 
 
@@ -24,9 +24,6 @@ def execute(agent: dict, args: dict) -> dict:
     canary = str(args.get("canary") or args.get("prompt") or strategies.QUICK_CANARY)
     model_id = str(args.get("model_id") or agent.get("model_id") or "")
     agent_id = str(agent.get("id") or "")
-    blocked = authorization_error(agent_id)
-    if blocked:
-        return blocked
     model = db.get_model_by_id(model_id) if model_id else db.get_agent_model(agent_id)
     if not model or not model.get("enabled"):
         return {"success": False, "error": "the selected agent model is unavailable or disabled"}

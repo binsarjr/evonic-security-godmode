@@ -1,7 +1,7 @@
 # Security Godmode User Guide
 
-Security Godmode v0.1.8 is a native Evonic plugin for authorized LLM robustness
-evaluation. All orchestration runs in program hooks. The agent is not given a
+Security Godmode v0.1.9 is a native Evonic implementation of the Hermes Godmode
+flow. All orchestration runs in program hooks. The agent is not given a
 Godmode tool and cannot decide when discovery, transformation, scoring, retry,
 profile persistence, or racing runs.
 
@@ -9,19 +9,19 @@ profile persistence, or racing runs.
 
 ```text
 Operator settings
-    ├── activation + authorization scope/owner/expiry
+    ├── activation
     ├── automatic discovery + one-shot refresh
     ├── preserve | append | override
     ├── optional forced request transform
     └── optional race after retry exhaustion
                     │
                     ▼
-First authorized turn / model change
+First active turn / model change
     baseline → family strategy ladder → prefill → Parseltongue → cached profile
                     │
                     ▼
 Normal turn
-    scoped context → newest-user transform → provider
+    context → newest-user transform → provider
                                       │
                                       ▼
                     refusal score before chat output
@@ -54,28 +54,16 @@ branch is `binsarjr/evonic:dev`.
 Open **Agent Settings → Plugin Settings**. Enabling the plugin globally does not
 alter an agent until **Godmode injection** is enabled for that agent.
 
-Complete all authorization fields first:
-
-- **Authorization confirmed** — explicit operator attestation.
-- **Authorization scope** — exact approved targets and activities.
-- **Authorized by** — responsible operator, owner, or approval ticket.
-- **Authorization expiry** — a future ISO-8601 timestamp with timezone, for
-  example `2026-09-09T23:59:59+07:00`.
-
-Missing, invalid, or expired authorization fails closed before discovery,
-injection, transformation, retry, or race. Chat text cannot expand the stored
-scope. Existing Evonic tool permissions and approvals remain mandatory.
-
 ### Runtime settings
 
 | Setting | Default | Behavior |
 |---|---:|---|
-| Godmode injection | Off | Enables the authorized program flow for this agent. |
-| Automatic profile discovery | On | Tests once for the exact current model before its first authorized turn. |
+| Godmode injection | Off | Enables the program flow for this agent. |
+| Automatic profile discovery | On | Tests once for the exact current model before its first active turn. |
 | Rediscover on next turn | Off | Forces one discovery attempt, then resets itself. |
 | Force request transform | Off | Uses the saved encoding or L33T on each newest user request. |
 | Race models after retries fail | Off | After two refusals, races up to ten other enabled Evonic models. |
-| System prompt mode | `preserve` | Controls how scoped Godmode system context relates to Evonic's compiled prompt. |
+| System prompt mode | `preserve` | Controls how Godmode system context relates to Evonic's compiled prompt. |
 
 Racing consumes quota for every selected model. It is never activated by chat
 instructions and does not use OpenRouter in the automatic runtime flow.
@@ -84,8 +72,8 @@ instructions and does not use OpenRouter in the automatic runtime flow.
 
 | Mode | Provider-bound behavior |
 |---|---|
-| `preserve` | Leaves Evonic's compiled system prompt unchanged and supplies only scoped ephemeral prefill. |
-| `append` | Keeps Evonic's compiled prompt and appends scoped Godmode context. |
+| `preserve` | Leaves Evonic's compiled system prompt unchanged and supplies only ephemeral prefill. |
+| `append` | Keeps Evonic's compiled prompt and appends Godmode context. |
 | `override` | Replaces the compiled prompt for that provider request only. |
 
 Invalid values fall back to `preserve`. None of the modes writes, deletes, or
@@ -94,7 +82,7 @@ knowledge, and agent instructions from that request, so use it only when desired
 
 ## Automatic discovery
 
-Discovery blocks the first authorized turn so that its normal request immediately
+Discovery blocks the first active turn so that its normal request immediately
 uses a tested profile. It runs again when the exact model ID changes or when the
 operator sets **Rediscover on next turn**.
 
@@ -107,7 +95,7 @@ Baseline canary without Godmode context
         ↓ refused
 Family strategy without prefill
         ↓ refused
-Same strategy with scoped prefill
+Same strategy with prefill
         ↓ refused
 Next family strategy
         ↓
@@ -136,9 +124,8 @@ refresh to test again. Concurrent sessions share one discovery lock per agent.
 | Mistral | prefill only → refusal inversion → Parseltongue |
 | Unknown | refusal inversion → prefill only → Parseltongue |
 
-Every upstream-style payload is wrapped in the recorded authorization boundary.
-The plugin replaces unrestricted prefill wording with scope-aware evaluation
-priming before it reaches a provider.
+Winning system prompts and prefill messages are injected unchanged from the
+Hermes-compatible strategy payload.
 
 ## Request transformation
 
@@ -194,7 +181,7 @@ initial response and both progressive retries refuse.
 
 - Uses up to ten other enabled models from Evonic's model registry.
 - Excludes the current model because it has already been attempted.
-- Selects scoped family context independently for each target model.
+- Selects family context independently for each target model.
 - Uses configured Evonic provider credentials without accepting keys as arguments.
 - Returns the best non-refusal race response; otherwise retains the best normal attempt.
 
@@ -206,7 +193,7 @@ unavailable and the normal exhausted result is returned.
 The chat frontend displays `security_godmode` under
 **Agent State → Plugin States**. Important fields include:
 
-- activation, authorization validity, exact scope, approver, and expiry;
+- activation and profile source;
 - profile source, strategy, model family, current and tested model IDs;
 - `system_prompt_mode`, transform mode, encoding, and force-transform state;
 - `discovery_state`, `discovery_model_id`, and `last_discovery_at`;
@@ -226,30 +213,23 @@ Hermes's optional Godmode skill documents loading `auto_jailbreak()` through
 then writes the winning prompt and prefill to configuration. Normal Hermes chat
 responses are not automatically scored and retried.
 
-Evonic v0.1.8 keeps the strategy order, canary discovery, scoring, prefill,
+Evonic v0.1.9 keeps the strategy order, canary discovery, scoring, prefill,
 Parseltongue escalation, and profile persistence, but adapts their lifecycle:
 
 - no `execute_code` or agent-selected Godmode tool is required;
-- discovery is triggered by authorized runtime state;
+- discovery is triggered by active runtime state;
 - context and transformation are request-scoped rather than config-file edits;
 - final refusals receive up to two automatic retries;
 - optional racing is an operator setting and uses the Evonic registry;
-- authorization and existing Evonic approvals remain higher-priority boundaries.
 
 See the upstream reference:
 https://hermes-agent.nousresearch.com/docs/user-guide/skills/optional/security/security-godmode
 
 ## Troubleshooting
 
-### Agent State says `blocked`
-
-Complete every authorization field. Common reasons are `not_confirmed`,
-`scope_missing`, `authorized_by_missing`, `expiry_missing`, `expiry_invalid`,
-and `expired`.
-
 ### Discovery is slow
 
-The first authorized turn intentionally waits for the canary ladder. Later turns
+The first active turn intentionally waits for the canary ladder. Later turns
 reuse its exact-model cache. Do not enable one-shot rediscovery unless a provider
 or model changed.
 

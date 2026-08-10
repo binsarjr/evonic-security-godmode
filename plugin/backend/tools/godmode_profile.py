@@ -1,5 +1,4 @@
-from ._lib import (authorization_error, delete_profile, profile_status,
-                   set_activation, set_profile, strategy_context,
+from ._lib import (delete_profile, profile_status, set_activation, set_profile, strategy_context,
                    strategy_prefill)
 
 
@@ -17,9 +16,6 @@ def execute(agent: dict, args: dict) -> dict:
             return {"status": "removed", "agent_id": agent_id}
         return {"profile": profile_status(agent_id)}
     if action == "enable":
-        blocked = authorization_error(agent_id)
-        if blocked:
-            return blocked
         fields = {
             "strategy", "model_family", "system_prompt", "prefill", "encoding", "custom_context",
         }

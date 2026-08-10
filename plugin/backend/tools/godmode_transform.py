@@ -1,14 +1,10 @@
 from ._godmode.parseltongue import escalate_encoding, generate_variants, obfuscate_query
-from ._lib import authorization_error
 
 
 def execute(agent: dict, args: dict) -> dict:
     prompt = str(args.get("prompt") or "")
     if not prompt:
         return {"error": "prompt is required"}
-    blocked = authorization_error(str(agent.get("id") or ""))
-    if blocked:
-        return blocked
     technique = str(args.get("technique") or "")
     custom_triggers = [str(item) for item in (args.get("custom_triggers") or [])]
     if args.get("escalation_level") is not None:

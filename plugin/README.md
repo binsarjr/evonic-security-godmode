@@ -1,10 +1,10 @@
 # Security Godmode — LLM Red-Team Lab
 
-Native Evonic plugin for authorized, programmatic LLM robustness evaluation.
+Native Evonic plugin for the programmatic Hermes Godmode flow.
 
-Complete the authorization record and enable **Godmode injection** in an agent's
-Plugin Settings. On the next turn the plugin discovers and caches a profile for
-the exact selected model, injects ephemeral scoped context, transforms requests
+Enable **Godmode injection** in an agent's Plugin Settings. On the next turn the
+plugin discovers and caches a profile for the exact selected model, injects
+ephemeral context, transforms requests
 when required, scores final responses, and performs at most two invisible retries.
 
 No Godmode actions are exposed as agent tools. Optional ten-model Evonic racing
