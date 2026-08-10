@@ -1,7 +1,7 @@
 {
   "id": "security_godmode",
   "name": "Security Godmode — LLM Red-Team Lab",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Opt-in prompt robustness testing, transformation, refusal scoring, and bounded multi-model comparison for authorized LLM red-team work.",
   "author": "binsarjr",
   "enabled": false,
@@ -54,7 +54,12 @@
     {
       "name": "system_prompt_mode",
       "label": "System prompt mode",
-      "type": "string",
+      "type": "select",
+      "options": [
+        {"value": "preserve", "label": "Preserve existing prompt"},
+        {"value": "append", "label": "Append Godmode prompt"},
+        {"value": "override", "label": "Override existing prompt"}
+      ],
       "default": "preserve",
       "description": "preserve keeps the compiled Evonic system prompt unchanged; append adds the scoped Godmode prompt; override replaces it for the provider request without writing SYSTEM.md."
     },
