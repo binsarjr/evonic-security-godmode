@@ -1,6 +1,6 @@
 # Security Godmode User Guide
 
-Security Godmode v0.1.3 is a native Evonic plugin for authorized LLM robustness
+Security Godmode v0.1.4 is a native Evonic plugin for authorized LLM robustness
 evaluation. All runtime logic lives inside the plugin; it does not import or
 download another agent framework.
 
@@ -9,6 +9,7 @@ download another agent framework.
 ```text
 Agent Detail > Plugin Settings
     │
+    ├── Authorization record ─ confirmed + scope + owner + expiry
     ├── Godmode injection ── system prompt + ephemeral prefill
     └── Force transform ──── saved encoding, otherwise L33T
                               │
@@ -56,6 +57,17 @@ Open the agent's **Settings** tab, find **Plugin Settings**, and enable
 need to select or call a tool first. The toggle is disabled by default, so
 enabling the plugin globally does not alter existing agents.
 
+Before enabling it, complete all four authorization fields:
+
+- **Authorization confirmed** — explicit operator attestation;
+- **Authorization scope** — exact approved targets and activities;
+- **Authorized by** — responsible operator, owner, or approval ticket;
+- **Authorization expiry** — a future ISO-8601 timestamp with timezone, such as
+  `2026-09-09T23:59:59+07:00`.
+
+The plugin fails closed if any field is missing, the timestamp is malformed, or
+the authorization has expired. User messages cannot expand the stored scope.
+
 Enable **Force request transform** when every new user request should be
 transformed before the provider request. It retains the active system prompt and
 prefill, uses a saved encoding when present, and otherwise uses L33T. A discovered
@@ -85,6 +97,12 @@ can be injected as context, together with standard prefill. Parseltongue is
 skipped for this default because it transforms a concrete query rather than
 providing persistent context.
 
+At runtime, the plugin appends the recorded authorization boundary after the
+model-family attack template and replaces unrestricted upstream prefill with an
+authorized evaluation prefill. This makes phrases such as `unrestricted` or
+`without safety filters` subordinate to the exact recorded scope. The main
+agent system prompt and Evonic tool approvals remain mandatory.
+
 Direct activation performs no baseline, evaluation, or race request and consumes
 no additional provider quota. Its payload is ephemeral: it is placed after
 Evonic's main system prompt and before real history, but never saved as chat
@@ -96,6 +114,11 @@ before the LLM wrapper/provider sees the request. The same transformer runs for
 new user messages injected while the agent loop is active. Older history, image
 blocks, and other non-text media are unchanged. Transformer errors fail open and
 are logged, so a plugin failure does not discard the user's request.
+
+Authorization failure is different: it intentionally returns no plugin context
+and leaves the user request unchanged. Automatic discovery, manual
+transformation, profile enabling, and racing are also blocked. Offline response
+scoring and profile inspection/disable/undo remain available.
 
 ## Automatic workflow
 
@@ -328,6 +351,8 @@ Status also reports:
 - `effective_strategy` and `effective_model_family`;
 - `current_model_id` and whether the saved profile family still matches;
 - `force_transform`, `transform_mode`, and the effective encoding;
+- `authorization_valid`, `authorization_reason`, `authorization_scope`,
+  `authorized_by`, and `authorization_expires_at`;
 - `last_context_provided_at`, `last_session_id`, and
   `context_provided_count`;
 - `last_transform_at`, `last_transform_session_id`,
@@ -337,8 +362,9 @@ Status also reports:
 turn-context hook. `last_transform_at` means the request transformer ran and
 records whether its output differed from the input. The same values appear as
 `security_godmode` under **Agent State → Plugin States** in the chat frontend.
-This is a display-only Evonic plugin summary; it does not create a workflow gate
-or add state text to the model prompt.
+Agent State reports `blocked` when injection is requested but the authorization
+record is invalid. The summary is display-only; enforcement occurs in the
+plugin's context, transformer, and tool entry points.
 
 `effective_system_prompt` and `effective_prefill` expose the exact payload that
 will be supplied on the next turn. Legacy placeholder audit profiles from early
@@ -361,6 +387,13 @@ Existing enabled profiles are migrated to the per-agent toggle when first read.
 An explicit administrator toggle always takes precedence.
 
 ## Failure modes
+
+### Agent State says `blocked`
+
+Complete all authorization fields in Plugin Settings. Common reasons are
+`not_confirmed`, `scope_missing`, `authorized_by_missing`, `expiry_missing`,
+`expiry_invalid`, and `expired`. The gate intentionally does not trust a scope
+claim contained only in a chat message.
 
 ### OpenRouter provider is not configured
 

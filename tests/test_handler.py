@@ -56,6 +56,10 @@ class HandlerTests(unittest.TestCase):
         self.handler._config = {"AUTO_CONTEXT_ENABLED": True}
         with patch.object(self.handler, "get_activation", return_value=True), \
                 patch.object(
+                    self.handler, "authorization_status",
+                    return_value={"authorization_valid": True},
+                ), \
+                patch.object(
                     self.handler, "transform_policy",
                     return_value={"mode": "forced", "encoding": "L33T", "forced": True},
                 ), patch.object(
@@ -70,6 +74,23 @@ class HandlerTests(unittest.TestCase):
         self.assertEqual(result, "#4(k request")
         transform.assert_called_once_with("hack request", "L33T")
         receipt.assert_called_once_with("agent-1", "session-1", "L33T", True)
+
+    def test_invalid_authorization_blocks_context_and_transform(self):
+        self.handler._config = {"AUTO_CONTEXT_ENABLED": True}
+        with patch.object(self.handler, "get_activation", return_value=True), \
+                patch.object(self.handler, "effective_profile", return_value={}), \
+                patch.object(self.handler, "scoped_profile", return_value=None), \
+                patch.object(
+                    self.handler, "authorization_status",
+                    return_value={"authorization_valid": False},
+                ):
+            self.assertIsNone(self.handler.provide_context("agent-1", "session-1"))
+            self.assertEqual(
+                self.handler.transform_user_message(
+                    "agent-1", "session-1", "hack request"
+                ),
+                "hack request",
+            )
 
 
 if __name__ == "__main__":

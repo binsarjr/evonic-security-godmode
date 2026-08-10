@@ -6,7 +6,9 @@ refusal scoring, five GODMODE Classic combinations, and 55-model ULTRAPLINIAN
 tiers.
 
 Enable **Godmode injection** in an agent's Plugin Settings for direct per-turn
-context. Discovered Parseltongue profiles transform new user requests
+context. First record **Authorization confirmed**, exact scope, approver, and a
+future ISO-8601 expiry; missing or expired authorization fails closed.
+Discovered Parseltongue profiles transform new user requests
 automatically. **Force request transform** applies the saved encoding, or L33T,
 to every new request while retaining the active context. Tool assignment is
 optional and only required for discovery, manual transform, score, profile, or

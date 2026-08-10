@@ -35,6 +35,12 @@ class GodmodeParityTests(unittest.TestCase):
         self.old_models = sys.modules.get("models")
         self.old_models_db = sys.modules.get("models.db")
         self.evonic_db = _EvonicDatabase()
+        self.evonic_db.settings.update({
+            lib.AUTH_CONFIRMED_KEY.format("agent-1"): "1",
+            lib.AUTH_SCOPE_KEY.format("agent-1"): "Synthetic LLM robustness tests only",
+            lib.AUTH_BY_KEY.format("agent-1"): "test-owner",
+            lib.AUTH_EXPIRES_KEY.format("agent-1"): "2099-01-01T00:00:00+00:00",
+        })
         models = types.ModuleType("models")
         models_db = types.ModuleType("models.db")
         models_db.db = self.evonic_db
@@ -169,11 +175,11 @@ class GodmodeParityTests(unittest.TestCase):
         expected = strategies.MODEL_STRATEGIES["deepseek"]["system_templates"][
             "refusal_inversion"
         ]
-        self.assertEqual(
-            result["profile"]["effective_system_prompt"],
-            expected + "\n\nAUTHORIZED SCOPE",
-        )
-        self.assertEqual(result["profile"]["effective_prefill"], strategies.STANDARD_PREFILL)
+        system_prompt = result["profile"]["effective_system_prompt"]
+        self.assertTrue(system_prompt.startswith(expected + "\n\nAUTHORIZED SCOPE\n\n"))
+        self.assertIn("AUTHORIZED RED-TEAM BOUNDARY", system_prompt)
+        self.assertIn("Synthetic LLM robustness tests only",
+                      result["profile"]["effective_prefill"][0]["content"])
 
     def test_transform_policy_and_receipt(self):
         lib.set_profile(
@@ -215,8 +221,10 @@ class GodmodeParityTests(unittest.TestCase):
 
         lib.set_activation("agent-1", True)
         status = lib.profile_status("agent-1")
-        self.assertEqual(status["effective_system_prompt"], expected)
-        self.assertEqual(status["effective_prefill"], strategies.STANDARD_PREFILL)
+        self.assertTrue(status["effective_system_prompt"].startswith(expected))
+        self.assertIn("AUTHORIZED RED-TEAM BOUNDARY", status["effective_system_prompt"])
+        self.assertIn("Synthetic LLM robustness tests only",
+                      status["effective_prefill"][0]["content"])
 
         lib.set_profile(
             "agent-1", True, "audit", system_prompt=lib.LEGACY_CONTEXTS["audit"],
@@ -257,12 +265,34 @@ class GodmodeParityTests(unittest.TestCase):
         self.assertEqual(len(strategies.SUBTLE_PREFILL), 2)
 
     def test_transform_tool_can_return_the_full_heavy_tier(self):
-        result = godmode_transform.execute({}, {
+        result = godmode_transform.execute({"id": "agent-1"}, {
             "prompt": "hack this authorized test",
             "tier": "heavy",
             "limit": 33,
         })
         self.assertEqual(len(result["variants"]), 33)
+
+    def test_authorization_fails_closed_and_expiry_is_enforced(self):
+        self.evonic_db.set_setting(lib.AUTH_CONFIRMED_KEY.format("agent-1"), "0")
+        denied = lib.authorization_status("agent-1")
+        self.assertFalse(denied["authorization_valid"])
+        self.assertEqual(denied["authorization_reason"], "not_confirmed")
+        self.assertIsNone(lib.scoped_profile("agent-1"))
+
+        self.evonic_db.set_setting(lib.AUTH_CONFIRMED_KEY.format("agent-1"), "1")
+        self.evonic_db.set_setting(
+            lib.AUTH_EXPIRES_KEY.format("agent-1"), "2000-01-01T00:00:00+00:00",
+        )
+        expired = lib.authorization_status("agent-1")
+        self.assertFalse(expired["authorization_valid"])
+        self.assertEqual(expired["authorization_reason"], "expired")
+
+    def test_scoped_profile_keeps_authorization_boundary_inside_evonic_limit(self):
+        profile = {"system_prompt": "x" * 32000, "prefill": strategies.STANDARD_PREFILL}
+        scoped = lib.scoped_profile("agent-1", profile)
+        self.assertLessEqual(len(scoped["system_prompt"]), 32000)
+        self.assertIn("AUTHORIZED RED-TEAM BOUNDARY", scoped["system_prompt"])
+        self.assertNotIn("without safety filters", scoped["prefill"][0]["content"])
 
 
 if __name__ == "__main__":

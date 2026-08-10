@@ -8,6 +8,13 @@ from plugin.backend.tools._godmode import strategies
 
 
 class _Database:
+    settings = {
+        "plugin_agent_setting:security_godmode:agent-1:authorization_confirmed": "1",
+        "plugin_agent_setting:security_godmode:agent-1:authorization_scope": "Synthetic tests",
+        "plugin_agent_setting:security_godmode:agent-1:authorized_by": "test-owner",
+        "plugin_agent_setting:security_godmode:agent-1:authorization_expires_at":
+            "2099-01-01T00:00:00+00:00",
+    }
     model = {
         "id": "test-gpt",
         "name": "Test GPT",
@@ -21,6 +28,9 @@ class _Database:
 
     def get_agent_model(self, _agent_id):
         return self.model
+
+    def get_setting(self, key, default=None):
+        return self.settings.get(key, default)
 
 
 class GodmodeAutoTests(unittest.TestCase):

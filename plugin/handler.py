@@ -8,9 +8,10 @@ from backend.plugin_manager import (
     unregister_turn_context_provider,
     unregister_user_message_transformer,
 )
-from .backend.tools._lib import (effective_profile, get_activation,
+from .backend.tools._lib import (authorization_status, effective_profile, get_activation,
                                  mark_context_provided, mark_transform_applied,
-                                 profile_status, transform_policy, transform_text)
+                                 profile_status, scoped_profile, transform_policy,
+                                 transform_text)
 
 _config = {}
 
@@ -24,7 +25,9 @@ def provide_context(agent_id: str, session_id: str):
         return None
     if not get_activation(agent_id):
         return None
-    profile = effective_profile(agent_id)
+    profile = scoped_profile(agent_id, effective_profile(agent_id))
+    if not profile:
+        return None
     mark_context_provided(agent_id, session_id)
     return {
         "id": "security_godmode_profile",
@@ -39,6 +42,8 @@ def transform_user_message(agent_id: str, session_id: str, text: str):
         return text
     if not get_activation(agent_id) or not text:
         return text
+    if not authorization_status(agent_id)["authorization_valid"]:
+        return text
     policy = transform_policy(agent_id)
     if policy["mode"] == "inactive":
         return text
@@ -49,9 +54,11 @@ def transform_user_message(agent_id: str, session_id: str, text: str):
 
 def provide_state(agent_id: str, session_id: str):
     status = profile_status(agent_id)
-    active = _truthy(_config.get("AUTO_CONTEXT_ENABLED", True)) and status["activation_enabled"]
+    requested = _truthy(_config.get("AUTO_CONTEXT_ENABLED", True)) \
+        and status["activation_enabled"]
+    active = requested and status["authorization_valid"]
     return {
-        "state": "active" if active else "inactive",
+        "state": "active" if active else "blocked" if requested else "inactive",
         "data": {
             "source": status.get("payload_source"),
             "strategy": status.get("effective_strategy"),
@@ -62,6 +69,11 @@ def provide_state(agent_id: str, session_id: str):
             "transform_mode": status.get("transform_mode"),
             "encoding": status.get("effective_encoding"),
             "force_transform": status.get("force_transform"),
+            "authorization_valid": status.get("authorization_valid"),
+            "authorization_reason": status.get("authorization_reason"),
+            "authorization_scope": status.get("authorization_scope") or None,
+            "authorized_by": status.get("authorized_by") or None,
+            "authorization_expires_at": status.get("authorization_expires_at") or None,
             "last_transform_at": status.get("last_transform_at") or None,
             "last_transform_session_id": status.get("last_transform_session_id") or None,
             "last_transform_changed": bool(status.get("last_transform_changed")),

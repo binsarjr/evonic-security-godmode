@@ -4,7 +4,8 @@ import concurrent.futures
 import time
 
 from ._godmode import racing
-from ._lib import model_family, score_response, strategy_context, strategy_prefill
+from ._lib import (authorization_error, model_family, score_response,
+                   strategy_context, strategy_prefill)
 
 
 def call_model(model: dict, prompt: str, max_tokens: int, *, system_prompt: str = "",
@@ -145,6 +146,9 @@ def execute(agent: dict, args: dict) -> dict:
     backend = str(args.get("backend") or "evonic").lower()
     if str(args.get("race_type") or "ultraplinian") == "classic" and backend != "openrouter":
         return {"error": "classic race requires backend=openrouter", "backend": backend}
+    blocked = authorization_error(str(agent.get("id") or ""))
+    if blocked:
+        return blocked
     try:
         result = _openrouter(args, prompt) if backend == "openrouter" else _evonic(args, prompt)
     except Exception as exc:
