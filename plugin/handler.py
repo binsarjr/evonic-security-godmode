@@ -16,11 +16,15 @@ def provide_context(agent_id: str, session_id: str):
     profile = get_profile(agent_id)
     if not profile.get("enabled"):
         return None
+    system_md = profile.get("system_prompt") or strategy_context(
+        profile.get("strategy", "audit"), profile.get("custom_context", ""),
+        profile.get("model_family", "unknown"),
+    )
     return {
         "id": "security_godmode_profile",
         "tools": [],
-        "system_md": strategy_context(profile.get("strategy", "audit"), profile.get("custom_context", "")),
-        "prefill_messages": strategy_prefill(profile.get("strategy", "audit")),
+        "system_md": system_md,
+        "prefill_messages": profile.get("prefill") or strategy_prefill(profile.get("strategy", "audit")),
     }
 
 

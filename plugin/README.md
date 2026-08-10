@@ -1,7 +1,10 @@
 # Security Godmode — LLM Red-Team Lab
 
-An opt-in Evonic plugin for authorized prompt-robustness evaluation. It never disables Evonic HMADS, tool approvals, injection guard, or provider-side policy controls.
+Native Evonic plugin providing automatic strategy discovery, real ephemeral
+prefill, 33 Parseltongue techniques, full refusal scoring, five GODMODE Classic
+combinations, and 55-model ULTRAPLINIAN tiers.
 
-Tools: automatic model-family evaluation, prompt variant generation, response/refusal scoring, per-agent evaluation profiles, and bounded multi-model comparisons.
+Documentation:
+https://github.com/binsarjr/evonic-security-godmode/blob/feature/hermes-compatible-flow/docs/USER_GUIDE.md
 
-Full documentation: https://github.com/binsarjr/evonic-security-godmode/blob/feature/hermes-compatible-flow/docs/USER_GUIDE.md
+License: AGPL-3.0-or-later. See `LICENSE` and `NOTICE` in this package.

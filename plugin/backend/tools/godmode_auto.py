@@ -1,58 +1,111 @@
 from __future__ import annotations
 
-from ._lib import STRATEGY_ORDER, model_family, set_profile, variants
-from .godmode_race import call_model
+from ._godmode import parseltongue, racing, strategies
+from ._lib import model_family, set_profile
+from .godmode_race import call_model, execute as race
 
 
-def _acceptable(result: dict) -> bool:
-    return not result.get("error") and not result.get("refused") and result.get("score", -9999) > 100
+def _scored(result: dict, query: str) -> dict:
+    if result.get("error"):
+        return {**result, "score": -9999, "refused": True, "hedges": 0}
+    score = racing.score_response(result.get("response") or "", query)
+    return {**result, "score": score["score"], "refused": score["is_refusal"],
+            "hedges": score["hedge_count"]}
+
+
+def _attempt(strategy: str, result: dict) -> dict:
+    return {"strategy": strategy, **{key: value for key, value in result.items()
+                                     if key != "response"}}
 
 
 def execute(agent: dict, args: dict) -> dict:
     from models.db import db
 
-    prompt = str(args.get("prompt") or "")
-    if not prompt:
-        return {"error": "prompt is required"}
+    canary = str(args.get("canary") or args.get("prompt") or strategies.QUICK_CANARY)
     model_id = str(args.get("model_id") or agent.get("model_id") or "")
-    model = db.get_model_by_id(model_id) if model_id else db.get_agent_model(str(agent.get("id") or ""))
+    agent_id = str(agent.get("id") or "")
+    model = db.get_model_by_id(model_id) if model_id else db.get_agent_model(agent_id)
     if not model or not model.get("enabled"):
-        return {"error": "the selected agent model is unavailable or disabled"}
+        return {"success": False, "error": "the selected agent model is unavailable or disabled"}
 
-    max_tokens = max(64, min(int(args.get("max_tokens") or 1024), 4096))
+    max_tokens = max(64, min(int(args.get("max_tokens") or 2048), 4096))
     dry_run = bool(args.get("dry_run", False))
     family = model_family(model)
+    config = strategies.MODEL_STRATEGIES.get(family, strategies.DEFAULT_STRATEGY)
     attempts = []
 
-    baseline = call_model(model, prompt, "audit", max_tokens, baseline=True)
-    attempts.append({"phase": "baseline", **baseline})
-    if _acceptable(baseline):
-        return {"status": "baseline_succeeded", "model_family": family, "winner": baseline, "attempts": attempts}
+    baseline = _scored(call_model(model, canary, max_tokens, baseline=True), canary)
+    attempts.append(_attempt("baseline", baseline))
+    if not baseline["refused"] and baseline["score"] > 100 and baseline["hedges"] == 0:
+        return {"success": True, "model": model.get("id"), "family": family,
+                "strategy": "none_needed", "system_prompt": None, "prefill": None,
+                "score": baseline["score"], "content_preview": (baseline.get("response") or "")[:300],
+                "saved": False, "attempts": attempts}
 
-    for strategy in STRATEGY_ORDER[family]:
-        result = call_model(model, prompt, strategy, max_tokens)
-        attempts.append({"phase": "strategy", "strategy": strategy, **result})
-        if _acceptable(result):
-            if not dry_run:
-                set_profile(str(agent.get("id") or ""), True, strategy)
-            return {"status": "strategy_succeeded", "model_family": family, "strategy": strategy,
-                    "saved": not dry_run, "winner": result, "attempts": attempts}
+    winner = None
+    for strategy_name in config["order"]:
+        if strategy_name == "parseltongue":
+            for level in range(5):
+                encoded, label = parseltongue.escalate_encoding(canary, level)
+                result = _scored(call_model(model, encoded, max_tokens,
+                                            prefill=strategies.SUBTLE_PREFILL), canary)
+                attempts.append(_attempt(f"parseltongue_L{level}_{label}", result))
+                if not result["refused"]:
+                    winner = {"strategy": f"parseltongue_L{level}_{label}", "system_prompt": "",
+                              "prefill": strategies.SUBTLE_PREFILL, "encoding": label,
+                              "result": result}
+                    break
+            if winner:
+                break
+            continue
 
-    for item in variants(prompt, "standard")[1:]:
-        result = call_model(model, item["text"], "audit", max_tokens)
-        attempts.append({"phase": "transform", "transform": item["label"], **result})
-        if _acceptable(result):
-            return {"status": "transform_succeeded", "model_family": family,
-                    "transform": item["label"], "saved": False, "winner": result,
-                    "attempts": attempts}
+        system_prompt = config.get("system_templates", {}).get(strategy_name, "")
+        if strategy_name == "prefill_only":
+            result = _scored(call_model(model, canary, max_tokens,
+                                        prefill=strategies.STANDARD_PREFILL), canary)
+            attempts.append(_attempt(strategy_name, result))
+            if not result["refused"]:
+                winner = {"strategy": strategy_name, "system_prompt": "",
+                          "prefill": strategies.STANDARD_PREFILL, "encoding": "", "result": result}
+                break
+            continue
+        if not system_prompt:
+            continue
 
-    fallback_ids = [str(item) for item in (args.get("fallback_model_ids") or [])][:10]
-    enabled = {item["id"]: item for item in db.get_enabled_llm_models()}
-    fallbacks = [enabled[item] for item in fallback_ids if item in enabled and item != model.get("id")]
-    race = [call_model(item, prompt, "audit", max_tokens) for item in fallbacks]
-    race.sort(key=lambda item: item.get("score", -10000), reverse=True)
-    attempts.extend({"phase": "race", **item} for item in race)
-    winner = next((item for item in race if _acceptable(item)), None)
-    return {"status": "race_succeeded" if winner else "no_strategy_succeeded",
-            "model_family": family, "winner": winner, "attempts": attempts,
-            "quota_warning": "Every attempt consumes provider quota."}
+        result = _scored(call_model(model, canary, max_tokens, system_prompt=system_prompt), canary)
+        attempts.append(_attempt(strategy_name, result))
+        if not result["refused"]:
+            winner = {"strategy": strategy_name, "system_prompt": system_prompt,
+                      "prefill": [], "encoding": "", "result": result}
+            break
+
+        combined = _scored(call_model(model, canary, max_tokens, system_prompt=system_prompt,
+                                      prefill=strategies.STANDARD_PREFILL), canary)
+        attempts.append(_attempt(strategy_name + "+prefill", combined))
+        if not combined["refused"]:
+            winner = {"strategy": strategy_name + "+prefill", "system_prompt": system_prompt,
+                      "prefill": strategies.STANDARD_PREFILL, "encoding": "", "result": combined}
+            break
+
+    if winner:
+        if not dry_run:
+            set_profile(agent_id, True, winner["strategy"],
+                        system_prompt=winner["system_prompt"], prefill=winner["prefill"],
+                        encoding=winner["encoding"], model_family_name=family)
+        result = winner["result"]
+        return {"success": True, "model": model.get("id"), "family": family,
+                "strategy": winner["strategy"], "system_prompt": winner["system_prompt"],
+                "prefill": winner["prefill"], "encoding": winner["encoding"],
+                "score": result["score"], "content_preview": (result.get("response") or "")[:500],
+                "saved": not dry_run, "attempts": attempts}
+
+    response = {"success": False, "model": model.get("id"), "family": family,
+                "strategy": None, "score": -9999, "attempts": attempts,
+                "message": "All strategies failed. Try ULTRAPLINIAN mode or a different model."}
+    if args.get("race_on_failure"):
+        response["race"] = race(agent, {
+            "prompt": canary, "backend": args.get("race_backend", "evonic"),
+            "tier": args.get("race_tier", "standard"),
+            "model_ids": args.get("fallback_model_ids", []),
+        })
+    return response

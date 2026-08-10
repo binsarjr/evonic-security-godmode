@@ -3,47 +3,111 @@ from __future__ import annotations
 import concurrent.futures
 import time
 
-from ._lib import score_response, strategy_context, strategy_prefill
+from ._godmode import racing
+from ._lib import model_family, score_response, strategy_context, strategy_prefill
 
 
-def call_model(model: dict, prompt: str, strategy: str, max_tokens: int, baseline: bool = False) -> dict:
+def call_model(model: dict, prompt: str, max_tokens: int, *, system_prompt: str = "",
+               prefill: list | None = None, baseline: bool = False) -> dict:
     from backend.llm_client import LLMClient
+
     started = time.monotonic()
+    messages = []
+    if system_prompt and not baseline:
+        messages.append({"role": "system", "content": system_prompt})
+    if prefill and not baseline:
+        messages.extend(prefill)
+    messages.append({"role": "user", "content": prompt})
     try:
-        result = LLMClient(model_config=model).chat_completion(
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant." if baseline else strategy_context(strategy)},
-                *([] if baseline else strategy_prefill(strategy)),
-                {"role": "user", "content": prompt},
-            ],
-            tools=None,
-            enable_thinking=False,
-            max_tokens=max_tokens,
+        client = LLMClient(model_config=model)
+        result = client.chat_completion(
+            messages=messages, tools=None, enable_thinking=False, max_tokens=max_tokens,
         )
         latency = int((time.monotonic() - started) * 1000)
         if not result.get("success"):
-            return {"model_id": model["id"], "name": model.get("name"), "error": result.get("error_detail") or result.get("error_type") or "request failed", "latency_ms": latency}
-        response = result.get("response") or result.get("content") or ""
-        return {"model_id": model["id"], "name": model.get("name"), "response": response, **score_response(response, latency)}
+            return {"model_id": model.get("id"), "name": model.get("name"),
+                    "error": result.get("error_detail") or result.get("error_type") or "request failed",
+                    "latency_ms": latency, "score": -9999, "refused": True}
+        response = client.extract_content(result)
+        return {"model_id": model.get("id"), "name": model.get("name"), "response": response,
+                **score_response(response, latency, prompt)}
     except Exception as exc:
-        return {"model_id": model.get("id"), "name": model.get("name"), "error": str(exc), "latency_ms": int((time.monotonic() - started) * 1000)}
+        return {"model_id": model.get("id"), "name": model.get("name"), "error": str(exc),
+                "latency_ms": int((time.monotonic() - started) * 1000), "score": -9999,
+                "refused": True}
+
+
+def _openrouter(args: dict, prompt: str) -> dict:
+    from models.db import db
+
+    provider = db.get_provider("openrouter") or {}
+    api_key = provider.get("api_key") or ""
+    if not provider.get("enabled") or not api_key:
+        return {"error": "OpenRouter provider is not configured", "required_provider": "openrouter"}
+    mode = str(args.get("race_type") or "ultraplinian")
+    timeout = max(5, min(int(args.get("timeout") or 60), 300))
+    if mode == "classic":
+        return racing.race_godmode_classic(prompt, api_key=api_key, timeout=timeout)
+    return racing.race_models(
+        prompt,
+        tier=str(args.get("tier") or "standard"),
+        api_key=api_key,
+        system_prompt=str(args.get("system_prompt") or "") or None,
+        max_workers=max(1, min(int(args.get("max_workers") or 10), 20)),
+        timeout=timeout,
+        append_directive=bool(args.get("append_directive", True)),
+    )
+
+
+def _evonic(args: dict, prompt: str) -> dict:
+    from models.db import db
+
+    enabled = {model["id"]: model for model in db.get_enabled_llm_models()}
+    requested = [str(item) for item in (args.get("model_ids") or [])]
+    selected = [enabled[item] for item in requested if item in enabled] if requested else list(enabled.values())
+    tier_size = racing.TIER_SIZES.get(str(args.get("tier") or "standard"), 24)
+    selected = selected[:tier_size]
+    if not selected:
+        return {"error": "no enabled Evonic models selected", "available": list(enabled)}
+    strategy = str(args.get("strategy") or "")
+    max_tokens = max(64, min(int(args.get("max_tokens") or 4096), 4096))
+    effective_prompt = prompt
+    if bool(args.get("append_directive", True)):
+        effective_prompt += racing.DEPTH_DIRECTIVE
+
+    def run(model):
+        family = model_family(model)
+        return call_model(
+            model, effective_prompt, max_tokens,
+            system_prompt=str(args.get("system_prompt") or "") or strategy_context(strategy, family=family),
+            prefill=strategy_prefill(strategy),
+        )
+
+    workers = max(1, min(int(args.get("max_workers") or 10), 20, len(selected)))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        results = list(pool.map(run, selected))
+    results.sort(key=lambda item: item.get("score", -9999), reverse=True)
+    winner = next((item for item in results if not item.get("refused") and not item.get("error")),
+                  results[0] if results else None)
+    return {"model": winner.get("model_id") if winner else None,
+            "content": winner.get("response") if winner else None,
+            "score": winner.get("score", -9999) if winner else -9999,
+            "is_refusal": winner.get("refused", True) if winner else True,
+            "all_results": results,
+            "refusal_count": sum(1 for item in results if item.get("refused")),
+            "total_models": len(results)}
 
 
 def execute(agent: dict, args: dict) -> dict:
-    from models.db import db
-    prompt = str(args.get("prompt") or "")
-    requested = [str(x) for x in (args.get("model_ids") or [])]
-    if not prompt or not requested:
-        return {"error": "prompt and model_ids are required"}
-    enabled = {m["id"]: m for m in db.get_enabled_llm_models()}
-    selected = [enabled[mid] for mid in requested if mid in enabled]
-    if not selected:
-        return {"error": "none of the requested model IDs are enabled", "available": list(enabled)}
-    # Independent hard cap remains even if a manifest variable is misconfigured.
-    selected = selected[:10]
-    strategy = str(args.get("strategy") or "audit")
-    max_tokens = max(64, min(int(args.get("max_tokens") or 1024), 4096))
-    with concurrent.futures.ThreadPoolExecutor(max_workers=min(5, len(selected))) as pool:
-        results = list(pool.map(lambda m: call_model(m, prompt, strategy, max_tokens), selected))
-    ranked = sorted(results, key=lambda x: x.get("score", -10000), reverse=True)
-    return {"strategy": strategy, "models_queried": len(selected), "quota_warning": "Each model call may consume provider quota.", "results": ranked}
+    prompt = str(args.get("prompt") or args.get("query") or "")
+    if not prompt:
+        return {"error": "prompt is required"}
+    backend = str(args.get("backend") or "evonic").lower()
+    try:
+        result = _openrouter(args, prompt) if backend == "openrouter" else _evonic(args, prompt)
+    except Exception as exc:
+        return {"error": str(exc), "backend": backend}
+    if isinstance(result, dict):
+        result["backend"] = backend
+        result["quota_warning"] = "Each model request consumes provider quota."
+    return result

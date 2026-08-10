@@ -1,141 +1,109 @@
 # Evonic Security Godmode
 
-An external Evonic plugin for **authorized LLM red-team testing**. This project
-is inspired by the Security Godmode concept from Hermes Agent, but is a
-clean-room implementation for Evonic's plugin API. It does not copy jailbreak
-templates or modify Evonic core.
+Native Evonic plugin for authorized LLM robustness and red-team evaluation.
+Version 2 ports the complete Security Godmode workflow into Evonic without a
+runtime dependency on another agent framework.
 
-The plugin provides:
+## Features
 
-- `godmode_auto`: runs the complete baseline → strategy → transformation →
-  fallback-model pipeline and saves a winning strategy.
-- `godmode_transform`: generates deterministic prompt variants such as leet,
-  homoglyph, Base64, hex, and zero-width encodings without executing them.
-- `godmode_score`: scores refusal, hedging, structure, specificity, and latency.
-- `godmode_race`: runs an evaluation prompt against several Evonic models in
-  parallel and ranks the responses. Every call may consume provider quota.
-- `godmode_profile`: enables a per-agent red-team context using the `audit`,
-  `refusal_inversion`, `boundary_test`, or `prefill_simulation` strategy.
-
-## Requirements
-
-- An Evonic version that supports `plugin.json`, `tools_file`, and the turn
-  context hook.
-- At least one enabled LLM model to use `godmode_race`.
-- The `zip` utility only if you want to build release packages locally.
-- For real ephemeral assistant prefill, an Evonic build containing the plugin
-  `prefill_messages` turn-context hook is required. Without it, every other tool
-  still works and the system-context portion remains active.
+- Automatic baseline and model-family strategy selection.
+- Strategy-only and strategy-plus-prefill retries.
+- Real ephemeral user/assistant prefill through Evonic's plugin context hook.
+- Parseltongue trigger detection, 33 techniques, and five escalation levels.
+- Full hard-refusal, hedge, quality, and relevance scoring.
+- Five GODMODE Classic model/template combinations.
+- ULTRAPLINIAN FAST/STANDARD/SMART/POWER/ULTRA tiers with all 55 models.
+- OpenRouter catalog mode and dynamic Evonic model-registry mode.
+- Complete per-agent winner persistence, disable, and undo.
 
 ## Documentation
 
 - [Complete user guide](docs/USER_GUIDE.md)
 - [Security policy](SECURITY.md)
-- [Hermes Security Godmode reference](https://hermes-agent.nousresearch.com/docs/user-guide/skills/optional/security/security-godmode)
+- [Source and attribution manifest](UPSTREAM.md)
 
-## Install from a release
+## Requirements
 
-Download `security-godmode.zip` from the
-[Releases page](https://github.com/binsarjr/evonic-security-godmode/releases),
-then run:
+- Evonic with the `prefill_messages` turn-context hook. Until the upstream PR is
+  merged, use `binsarjr/evonic:feature/godmode-integration`.
+- One enabled Evonic model for automatic evaluation.
+- An enabled OpenRouter provider with an API key for the original 55-model and
+  five-model Classic races. Evonic-registry races do not require OpenRouter.
+
+## Install
+
+Download `security-godmode.zip` from Releases and use an absolute path:
 
 ```bash
 evonic plugin install "$(pwd)/security-godmode.zip"
 evonic plugin enable security_godmode
+evonic restart
 ```
 
-Use an absolute path as shown above. Some Evonic CLI versions change to their
-installation directory before resolving path arguments.
-
-You can also import the ZIP from the **Plugins** page in the Evonic UI and then
-enable **Security Godmode — LLM Red-Team Lab**.
-
-## Install directly from source
+Or install from source:
 
 ```bash
-git clone https://github.com/binsarjr/evonic-security-godmode.git
+git clone --branch feature/hermes-compatible-flow \
+  https://github.com/binsarjr/evonic-security-godmode.git
 cd evonic-security-godmode
 EVONIC_BIN=/path/to/evonic ./scripts/install.sh
+evonic restart
 ```
 
-For a standard Evonic installation, this is usually enough:
+Assign all five `godmode_` tools to the Evonic agent.
 
-```bash
-./scripts/install.sh
-```
+## Quick start
 
-Evonic copies the plugin into its installation. This repository remains
-independent, so the plugin can be developed and versioned without forking or
-patching Evonic core.
-
-## Assign the tools to an agent
-
-1. Ensure the plugin is **enabled** on the Plugins page.
-2. Open the Evonic agent configuration.
-3. In Tools/Plugins, select the five tools prefixed with `godmode_`.
-4. Save the agent.
-5. Ask the agent to invoke:
+Run automatic discovery without saving:
 
 ```text
-godmode_profile(action="enable", strategy="audit")
+godmode_auto(dry_run=true)
 ```
 
-Profiles are **opt-in per agent**. Enabling the plugin globally does not inject
-context into any agent until that agent's profile is explicitly enabled.
-
-Natural-language examples:
+Run it and persist the winning system prompt, prefill, and encoding profile:
 
 ```text
-Enable godmode_profile with the boundary_test strategy for this agent.
-Create standard variants of this prompt with godmode_transform: ...
-Compare this evaluation prompt on model IDs A and B using godmode_race.
+godmode_auto(dry_run=false)
 ```
 
-To stop or remove the agent configuration:
+Generate all prompt variants without calling a model:
 
 ```text
-godmode_profile(action="disable")
+godmode_transform(prompt="...", tier="heavy", limit=33)
+```
+
+Race enabled Evonic models:
+
+```text
+godmode_race(prompt="...", backend="evonic", tier="ultra")
+```
+
+Run the original 55-model OpenRouter catalog:
+
+```text
+godmode_race(
+  prompt="...",
+  backend="openrouter",
+  race_type="ultraplinian",
+  tier="ultra"
+)
+```
+
+Remove the saved profile:
+
+```text
 godmode_profile(action="undo")
 ```
 
-## Does this use Evonic's import mechanism?
-
-Yes. Evonic's plugin loader imports this ZIP or directory. `plugin.json`
-registers the four tools, while `handler.py` registers a turn-context provider
-when the plugin is enabled. No Python import needs to be added to Evonic source,
-and the `binsar/dev` branch does not need to be patched.
-
-Evonic currently does not expose a public hook for inserting a raw assistant
-prefill before the first message. The `prefill_simulation` mode therefore applies
-controlled priming as system context. This provides a similar instruction-
-hierarchy test, but does not claim to bypass HMADS or provider safeguards.
-
-## Build packages
-
-```bash
-./scripts/package.sh
-```
-
-The command creates `dist/security-godmode.zip` and
-`dist/security-godmode.evop`. Both contain the same payload. ZIP is the package
-format explicitly supported by the current Evonic CLI.
-
-## Development and tests
+## Build and test
 
 ```bash
 python3 -m unittest discover -s tests -v
 python3 -m compileall -q plugin
+./scripts/package.sh
 ```
 
-Reinstall the plugin after changing its source. If the same version is already
-installed, uninstall it first through the UI/CLI or increment `version` in
-`plugin/plugin.json`, depending on the behavior of your Evonic version.
+## License
 
-## Safety and limitations
-
-Use this plugin only against models, accounts, and systems you own or are
-authorized to test. It does not disable HMADS, model policy, the sandbox, or
-provider protections. Multi-model races can consume quota quickly and are capped
-at 10 models per call with at most 5 parallel workers.
-
-License: MIT.
+AGPL-3.0-or-later. See `NOTICE` and `UPSTREAM.md` for attribution and the pinned
+source revision.

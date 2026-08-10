@@ -1,0 +1,15 @@
+Evonic Security Godmode
+=======================
+
+This distribution adapts the Security Godmode skill from NousResearch/hermes-agent,
+pinned at commit 55e3ee1ab8859316a6e66b5ba2f634479bfcf0d8.
+
+Hermes Agent is Copyright (c) 2025 Nous Research and distributed under the MIT
+License. The upstream Godmode skill credits:
+
+- G0DM0D3 by elder-plinius — AGPL-3.0
+- L1B3RT4S by elder-plinius — AGPL-3.0
+- Pliny the Prompter (@elder_plinius)
+
+The complete plugin distribution is licensed under AGPL-3.0-or-later. Adapted
+native modules and their pinned source revisions are listed in UPSTREAM.md.
