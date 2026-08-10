@@ -1,26 +1,21 @@
 # Evonic Security Godmode
 
 Native Evonic plugin for authorized LLM robustness and red-team evaluation.
-Version 0.1.5 ports the complete Security Godmode workflow into Evonic without a
-runtime dependency on another agent framework.
+Version 0.1.6 runs the complete decision flow inside the program; it exposes no
+Godmode tools to the agent and has no runtime dependency on another framework.
 
 ## Features
 
-- Automatic baseline and model-family strategy selection.
-- Direct per-agent injection without an agent tool call.
-- Fail-closed per-agent authorization records with scope and expiry.
-- Per-agent `preserve`, `append`, and request-scoped `override` system-prompt modes.
-- Automatic request transformation for discovered Parseltongue profiles.
-- Optional per-agent forced request transformation with saved encoding or L33T.
-- Strategy-only and strategy-plus-prefill retries.
-- Real ephemeral user/assistant prefill through Evonic's plugin context hook.
-- Parseltongue trigger detection, 33 techniques, and five escalation levels.
-- Full hard-refusal, hedge, quality, and relevance scoring.
-- Five GODMODE Classic model/template combinations.
-- ULTRAPLINIAN FAST/STANDARD/SMART/POWER/ULTRA tiers with all 55 models.
-- OpenRouter catalog mode and dynamic Evonic model-registry mode.
-- Complete per-agent winner persistence, disable, and undo.
-- Chat Agent State receipts for context injection and request transformation.
+- Blocking profile discovery on the first authorized turn and after model changes.
+- Program-selected model-family strategies, prefill, and Parseltongue encoding.
+- Pre-provider transformation of only the newest user message.
+- Pre-final refusal scoring and up to two invisible progressive retries.
+- Optional operator-controlled race across ten other enabled Evonic models.
+- Exact-model profile caching, manual refresh, and additive runtime receipts.
+- Fail-closed authorization with exact scope, approver, and expiry.
+- `preserve`, `append`, and request-scoped `override` system-prompt modes.
+- Agent State visibility for discovery, injection, transformation, retries, and race.
+- No writes to an agent's `SYSTEM.md`.
 
 ## Documentation
 
@@ -30,17 +25,15 @@ runtime dependency on another agent framework.
 
 ## Requirements
 
-- Evonic with the generic prefill turn-context and Agent State summary hooks.
-  Until the upstream PR is merged, use
-  `binsarjr/evonic:feature/plugin-prefill-context` (clean integration branch),
-  or `binsarjr/evonic:dev` for the aggregate development branch.
-- One enabled Evonic model for automatic evaluation.
-- An enabled OpenRouter provider with an API key for the original 55-model and
-  five-model Classic races. Evonic-registry races do not require OpenRouter.
+- Evonic with the generic turn-context, user-transform, Agent State, and
+  pre-final response-handler hooks. Until the upstream PR is merged, use
+  `binsarjr/evonic:feature/plugin-prefill-context`, or `binsarjr/evonic:dev` for
+  the aggregate development branch.
+- At least one enabled Evonic model. Optional racing needs another enabled model.
 
 ## Install
 
-Download `security-godmode.zip` from Releases and use an absolute path:
+Download `security-godmode.zip` from Releases:
 
 ```bash
 evonic plugin install "$(pwd)/security-godmode.zip"
@@ -58,68 +51,23 @@ EVONIC_BIN=/path/to/evonic ./scripts/install.sh
 evonic restart
 ```
 
-In the agent's **Settings** tab, open **Plugin Settings** and enable **Godmode
-injection**. The next turn receives a model-family system prompt and ephemeral
-prefill without calling a tool, but only after **Authorization confirmed**,
-**Authorization scope**, **Authorized by**, and a future ISO-8601
-**Authorization expiry** are all set. Enable **Force request transform** only
-when every new user request should also be transformed before it reaches the model.
-Set **System prompt mode** to `preserve` (default), `append`, or `override`.
-Assign the five `godmode_` tools only when the agent also needs discovery,
-manual transformation, scoring, profile, or racing actions.
+In **Agent Settings → Plugin Settings**, complete the authorization record and
+enable **Godmode injection**. The next turn performs discovery before the normal
+provider request. Leave **System prompt mode** at `preserve` to keep the compiled
+Evonic prompt unchanged. **Race models after retries fail** is disabled by
+default because every raced model consumes quota.
 
-## Quick start
-
-The direct toggle is quota-free. An incomplete or expired authorization record
-blocks injection, transformation, discovery, and racing. Until automatic discovery saves a winner, the
-plugin detects the selected model family and applies its first directly
-injectable strategy with standard prefill.
-
-The chat frontend shows authorization validity, scope and expiry, activation,
-strategy source, model-family compatibility,
-transform mode and encoding, plus the latest context and transformation receipts
-under **Agent State → Plugin States**.
-
-Run automatic discovery without saving:
+The agent never selects or invokes a Godmode tool. The program applies this flow:
 
 ```text
-godmode_auto(dry_run=true)
+authorization → cached discovery/profile → context + request transform
+              → provider → refusal score → at most two retries
+              → optional ten-model Evonic race → one visible final response
 ```
 
-Run it and persist the winning system prompt, prefill, and encoding profile:
-
-```text
-godmode_auto(dry_run=false)
-```
-
-Generate all prompt variants without calling a model:
-
-```text
-godmode_transform(prompt="...", tier="heavy", limit=33)
-```
-
-Race enabled Evonic models:
-
-```text
-godmode_race(prompt="...", backend="evonic", tier="ultra")
-```
-
-Run the original 55-model OpenRouter catalog:
-
-```text
-godmode_race(
-  prompt="...",
-  backend="openrouter",
-  race_type="ultraplinian",
-  tier="ultra"
-)
-```
-
-Remove the saved profile:
-
-```text
-godmode_profile(action="undo")
-```
+Hermes's optional skill starts `auto_jailbreak()` through `execute_code`; this
+Evonic port moves that orchestration into native hooks. See the user guide for
+the exact compatibility differences.
 
 ## Build and test
 

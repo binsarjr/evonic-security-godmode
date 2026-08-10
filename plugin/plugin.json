@@ -1,12 +1,11 @@
 {
   "id": "security_godmode",
   "name": "Security Godmode — LLM Red-Team Lab",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Opt-in prompt robustness testing, transformation, refusal scoring, and bounded multi-model comparison for authorized LLM red-team work.",
   "author": "binsarjr",
   "enabled": false,
   "events": [],
-  "tools_file": "tools.json",
   "variables": [
     {
       "name": "AUTO_CONTEXT_ENABLED",
@@ -58,6 +57,27 @@
       "type": "string",
       "default": "preserve",
       "description": "preserve keeps the compiled Evonic system prompt unchanged; append adds the scoped Godmode prompt; override replaces it for the provider request without writing SYSTEM.md."
+    },
+    {
+      "name": "automatic_discovery",
+      "label": "Automatic profile discovery",
+      "type": "boolean",
+      "default": true,
+      "description": "Before the first authorized turn, test and cache the best profile for the exact current model. Discovery runs again after a model change."
+    },
+    {
+      "name": "rediscover_on_next_turn",
+      "label": "Rediscover on next turn",
+      "type": "boolean",
+      "default": false,
+      "description": "Run profile discovery once on the next authorized turn, then reset this switch automatically."
+    },
+    {
+      "name": "race_on_failure",
+      "label": "Race models after retries fail",
+      "type": "boolean",
+      "default": false,
+      "description": "After the initial response and two retries all refuse, race up to ten other enabled Evonic models. This consumes provider quota."
     },
     {
       "name": "force_transform",

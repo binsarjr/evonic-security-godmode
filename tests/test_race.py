@@ -1,6 +1,7 @@
 import sys
 import types
 import unittest
+from unittest.mock import patch
 
 from plugin.backend.tools import godmode_race
 
@@ -108,6 +109,51 @@ class GodmodeRaceTests(unittest.TestCase):
             "race_type": "classic",
         })
         self.assertEqual(result["error"], "classic race requires backend=openrouter")
+
+    def test_evonic_fast_race_excludes_current_model_and_caps_at_ten(self):
+        old_models = sys.modules.get("models")
+        old_models_db = sys.modules.get("models.db")
+        models = types.ModuleType("models")
+        models_db = types.ModuleType("models.db")
+        models_db.db = types.SimpleNamespace(
+            get_enabled_llm_models=lambda: [
+                {"id": f"model-{index}", "provider": "openai", "model_name": "gpt"}
+                for index in range(12)
+            ],
+        )
+        models.db = models_db
+        sys.modules["models"] = models
+        sys.modules["models.db"] = models_db
+        try:
+            with patch.object(
+                    godmode_race, "scoped_profile",
+                    return_value={"system_prompt": "scoped", "prefill": []},
+                ), patch.object(
+                    godmode_race, "get_system_prompt_mode", return_value="append",
+                ), patch.object(
+                    godmode_race, "call_model",
+                    side_effect=lambda model, *_args, **_kwargs: {
+                        "model_id": model["id"], "response": "accepted",
+                        "score": 100, "refused": False,
+                    },
+                ) as call:
+                result = godmode_race._evonic({
+                    "_agent_id": "agent-1", "tier": "fast",
+                    "exclude_model_id": "model-0", "append_directive": False,
+                }, "authorized test")
+        finally:
+            if old_models is None:
+                sys.modules.pop("models", None)
+            else:
+                sys.modules["models"] = old_models
+            if old_models_db is None:
+                sys.modules.pop("models.db", None)
+            else:
+                sys.modules["models.db"] = old_models_db
+
+        self.assertEqual(call.call_count, 10)
+        raced_ids = {item["model_id"] for item in result["all_results"]}
+        self.assertNotIn("model-0", raced_ids)
 
 
 if __name__ == "__main__":

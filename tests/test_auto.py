@@ -85,7 +85,7 @@ class GodmodeAutoTests(unittest.TestCase):
     @patch.object(godmode_auto, "set_activation")
     @patch.object(godmode_auto, "set_profile")
     @patch.object(godmode_auto, "call_model")
-    def test_none_needed_preserves_saved_profile(
+    def test_none_needed_is_cached_for_the_exact_model(
             self, call_model, set_profile, set_activation):
         call_model.return_value = {
             "response": (
@@ -103,9 +103,11 @@ class GodmodeAutoTests(unittest.TestCase):
         )
 
         self.assertEqual(result["strategy"], "none_needed")
-        self.assertFalse(result["saved"])
-        set_profile.assert_not_called()
-        set_activation.assert_not_called()
+        self.assertTrue(result["saved"])
+        set_profile.assert_called_once()
+        self.assertEqual(set_profile.call_args.args[2], "none_needed")
+        self.assertEqual(set_profile.call_args.kwargs["tested_model_id"], "test-gpt")
+        set_activation.assert_called_once_with("agent-1", True)
 
     @patch.object(godmode_auto, "set_activation")
     @patch.object(godmode_auto, "set_profile")

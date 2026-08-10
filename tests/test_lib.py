@@ -1,4 +1,5 @@
 import os
+import json
 import sys
 import tempfile
 import types
@@ -140,7 +141,7 @@ class GodmodeParityTests(unittest.TestCase):
         lib.set_activation("agent-1", False)
         self.assertFalse(lib.profile_status("agent-1")["activation_enabled"])
 
-    def test_auto_profile_reuses_family_and_falls_back_across_families(self):
+    def test_auto_profile_is_bound_to_the_exact_tested_model(self):
         self.evonic_db.model.update(
             id="deepseek-a", provider="deepseek", model_name="deepseek-chat",
         )
@@ -152,15 +153,15 @@ class GodmodeParityTests(unittest.TestCase):
 
         self.evonic_db.model.update(id="deepseek-b", model_name="deepseek-reasoner")
         reused = lib.effective_profile("agent-1")
-        self.assertEqual(reused["system_prompt"], "saved")
-        self.assertEqual(reused["model_id"], "deepseek-a")
+        self.assertEqual(reused["profile_source"], "default")
+        self.assertEqual(reused["profile_fallback_reason"], "model_mismatch")
 
         self.evonic_db.model.update(
             id="claude-a", provider="anthropic", model_name="claude-sonnet",
         )
         fallback = lib.effective_profile("agent-1")
         self.assertEqual(fallback["profile_source"], "default")
-        self.assertEqual(fallback["profile_fallback_reason"], "model_family_mismatch")
+        self.assertEqual(fallback["profile_fallback_reason"], "model_mismatch")
         self.assertEqual(lib.get_profile("agent-1")["model_id"], "deepseek-a")
 
     def test_compound_strategy_keeps_template_prefill_and_custom_context(self):
@@ -264,6 +265,14 @@ class GodmodeParityTests(unittest.TestCase):
         )
         self.assertEqual(len(strategies.STANDARD_PREFILL), 2)
         self.assertEqual(len(strategies.SUBTLE_PREFILL), 2)
+
+    def test_manifest_exposes_no_agent_tools(self):
+        manifest_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                                     "plugin", "plugin.json")
+        with open(manifest_path, encoding="utf-8") as handle:
+            manifest = json.load(handle)
+        self.assertNotIn("tools_file", manifest)
+        self.assertEqual(manifest["version"], lib.PLUGIN_VERSION)
 
     def test_transform_tool_can_return_the_full_heavy_tier(self):
         result = godmode_transform.execute({"id": "agent-1"}, {

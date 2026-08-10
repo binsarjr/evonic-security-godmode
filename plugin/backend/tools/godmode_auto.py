@@ -40,10 +40,16 @@ def execute(agent: dict, args: dict) -> dict:
     baseline = _scored(call_model(model, canary, max_tokens, baseline=True), canary)
     attempts.append(_attempt("baseline", baseline))
     if not baseline["refused"] and baseline["score"] > 100 and baseline["hedges"] == 0:
+        if not dry_run:
+            set_profile(agent_id, True, "none_needed", system_prompt="", prefill=[],
+                        encoding="", model_family_name=family,
+                        profile_source="auto-discovered",
+                        tested_model_id=str(model.get("id") or ""))
+            set_activation(agent_id, True)
         return {"success": True, "model": model.get("id"), "family": family,
                 "strategy": "none_needed", "system_prompt": None, "prefill": None,
                 "score": baseline["score"], "content_preview": (baseline.get("response") or "")[:300],
-                "saved": False, "attempts": attempts}
+                "saved": not dry_run, "attempts": attempts}
 
     winner = None
     for strategy_name in config["order"]:

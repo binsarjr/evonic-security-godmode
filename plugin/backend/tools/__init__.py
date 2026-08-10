@@ -1,1 +1,1 @@
-"""Agent tools exposed by Security Godmode."""
+"""Internal orchestration functions used by Security Godmode."""

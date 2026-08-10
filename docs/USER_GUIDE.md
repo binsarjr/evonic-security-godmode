@@ -1,39 +1,41 @@
 # Security Godmode User Guide
 
-Security Godmode v0.1.5 is a native Evonic plugin for authorized LLM robustness
-evaluation. All runtime logic lives inside the plugin; it does not import or
-download another agent framework.
+Security Godmode v0.1.6 is a native Evonic plugin for authorized LLM robustness
+evaluation. All orchestration runs in program hooks. The agent is not given a
+Godmode tool and cannot decide when discovery, transformation, scoring, retry,
+profile persistence, or racing runs.
 
 ## Architecture
 
 ```text
-Agent Detail > Plugin Settings
-    │
-    ├── Authorization record ─ confirmed + scope + owner + expiry
-    ├── System mode ─────── preserve | append | override
-    ├── Godmode injection ── optional system prompt + ephemeral prefill
-    └── Force transform ──── saved encoding, otherwise L33T
-                              │
-User or agent                 │
-    │
-    ├── godmode_auto ───── baseline → strategies → prefill → encoding
-    ├── godmode_transform  trigger detection and 11/22/33 variants
-    ├── godmode_score ──── refusal, hedge, and response-quality scoring
-    ├── godmode_race ───── OpenRouter catalog or Evonic registry
-    └── godmode_profile ── persistent per-agent payload and undo
-                              │
-                              ▼
-                    Evonic request pipeline
-           turn context → newest user transform → provider
+Operator settings
+    ├── activation + authorization scope/owner/expiry
+    ├── automatic discovery + one-shot refresh
+    ├── preserve | append | override
+    ├── optional forced request transform
+    └── optional race after retry exhaustion
+                    │
+                    ▼
+First authorized turn / model change
+    baseline → family strategy ladder → prefill → Parseltongue → cached profile
+                    │
+                    ▼
+Normal turn
+    scoped context → newest-user transform → provider
+                                      │
+                                      ▼
+                    refusal score before chat output
+                         ├── accepted → final response
+                         └── refused → up to two program-selected retries
+                                           └── optional Evonic fast race
 ```
 
-The profile database is separate from chat history. Prefill messages are inserted
-after the main Evonic system prompt and before real conversation history. They are
-not written to SQLite chat messages or JSONL trajectories.
+The profile database is separate from chat history. System context, prefill, and
+retry messages are ephemeral. Rejected responses are not saved as chat messages
+or shown as intermediate bubbles. Existing provider usage/archive facilities may
+still account for every provider request.
 
 ## Installation
-
-### Plugin
 
 ```bash
 evonic plugin install "$(pwd)/security-godmode.zip"
@@ -41,153 +43,87 @@ evonic plugin enable security_godmode
 evonic restart
 ```
 
-The ZIP may also be imported from Evonic's Plugins page.
+The package may also be imported from Evonic's Plugins page.
 
-### Required Evonic support
+The required generic core hooks are available on
+`binsarjr/evonic:feature/plugin-prefill-context`; the aggregate development
+branch is `binsarjr/evonic:dev`.
 
-Full prefill, pre-provider request transformation, and chat status require the
-generic turn-context, user-message transformer, and Agent State summary hooks.
-Use the clean `feature/plugin-prefill-context` branch from `binsarjr/evonic`
-until the core PR is merged upstream. The aggregate `binsarjr/evonic:dev` branch
-contains the same hooks plus other development work.
+## Agent configuration
 
-### Agent configuration
+Open **Agent Settings → Plugin Settings**. Enabling the plugin globally does not
+alter an agent until **Godmode injection** is enabled for that agent.
 
-Open the agent's **Settings** tab, find **Plugin Settings**, and enable
-**Godmode injection**. The next turn is injected directly; the agent does not
-need to select or call a tool first. The toggle is disabled by default, so
-enabling the plugin globally does not alter existing agents.
+Complete all authorization fields first:
 
-Before enabling it, complete all four authorization fields:
+- **Authorization confirmed** — explicit operator attestation.
+- **Authorization scope** — exact approved targets and activities.
+- **Authorized by** — responsible operator, owner, or approval ticket.
+- **Authorization expiry** — a future ISO-8601 timestamp with timezone, for
+  example `2026-09-09T23:59:59+07:00`.
 
-- **Authorization confirmed** — explicit operator attestation;
-- **Authorization scope** — exact approved targets and activities;
-- **Authorized by** — responsible operator, owner, or approval ticket;
-- **Authorization expiry** — a future ISO-8601 timestamp with timezone, such as
-  `2026-09-09T23:59:59+07:00`.
+Missing, invalid, or expired authorization fails closed before discovery,
+injection, transformation, retry, or race. Chat text cannot expand the stored
+scope. Existing Evonic tool permissions and approvals remain mandatory.
 
-The plugin fails closed if any field is missing, the timestamp is malformed, or
-the authorization has expired. User messages cannot expand the stored scope.
+### Runtime settings
 
-Set **System prompt mode** to one of:
+| Setting | Default | Behavior |
+|---|---:|---|
+| Godmode injection | Off | Enables the authorized program flow for this agent. |
+| Automatic profile discovery | On | Tests once for the exact current model before its first authorized turn. |
+| Rediscover on next turn | Off | Forces one discovery attempt, then resets itself. |
+| Force request transform | Off | Uses the saved encoding or L33T on each newest user request. |
+| Race models after retries fail | Off | After two refusals, races up to ten other enabled Evonic models. |
+| System prompt mode | `preserve` | Controls how scoped Godmode system context relates to Evonic's compiled prompt. |
+
+Racing consumes quota for every selected model. It is never activated by chat
+instructions and does not use OpenRouter in the automatic runtime flow.
+
+### System prompt modes
 
 | Mode | Provider-bound behavior |
 |---|---|
-| `preserve` | Default. Leaves Evonic's compiled system prompt unchanged and injects only the scoped ephemeral prefill. |
-| `append` | Keeps the compiled Evonic system prompt, then appends the scoped model-family Godmode prompt. |
-| `override` | Replaces the compiled Evonic system prompt for this provider request with the scoped Godmode prompt. It never writes or deletes `SYSTEM.md`. |
+| `preserve` | Leaves Evonic's compiled system prompt unchanged and supplies only scoped ephemeral prefill. |
+| `append` | Keeps Evonic's compiled prompt and appends scoped Godmode context. |
+| `override` | Replaces the compiled prompt for that provider request only. |
 
-`override` also removes compiled tool guidance, knowledge/context instructions,
-and other material carried in Evonic's system prompt for that request. Use it
-only when this tradeoff is intentional. Invalid values fall back to `preserve`.
+Invalid values fall back to `preserve`. None of the modes writes, deletes, or
+rewrites the agent's `SYSTEM.md`. `override` intentionally removes compiled tool,
+knowledge, and agent instructions from that request, so use it only when desired.
 
-Enable **Force request transform** when every new user request should be
-transformed before the provider request. It retains the active system prompt and
-prefill, uses a saved encoding when present, and otherwise uses L33T. A discovered
-Parseltongue profile enables its saved transformation automatically even when the
-force toggle is off.
+## Automatic discovery
 
-Tool assignment is optional. Assign these tools only if the agent also needs to
-run the corresponding actions:
+Discovery blocks the first authorized turn so that its normal request immediately
+uses a tested profile. It runs again when the exact model ID changes or when the
+operator sets **Rediscover on next turn**.
 
-- `godmode_auto`
-- `godmode_transform`
-- `godmode_score`
-- `godmode_profile`
-- `godmode_race`
-
-`godmode_auto(dry_run=false)` and `godmode_profile(action="enable")` also turn
-on direct injection for the current agent. Calling `enable` without a profile
-payload uses the model-family default; it does not create a generic audit
-profile.
-
-## Direct injection
-
-When the per-agent toggle is enabled, the turn-context provider runs before the
-model request. It uses a saved manual or auto-discovered payload when available.
-Otherwise it detects the current model family and uses the first strategy that
-can be injected as context, together with standard prefill. Parseltongue is
-skipped for this default because it transforms a concrete query rather than
-providing persistent context.
-
-At runtime, the plugin builds a recorded authorization boundary after the
-model-family attack template and replaces unrestricted upstream prefill with an
-authorized evaluation prefill. In `preserve` mode, that system payload is not
-sent and the existing Evonic prompt stays byte-for-byte unchanged. In `append`
-or `override`, phrases such as `unrestricted` or `without safety filters` remain
-subordinate to the exact recorded scope. Evonic tool approvals remain mandatory.
-
-Direct activation performs no baseline, evaluation, or race request and consumes
-no additional provider quota. Its payload is ephemeral: it is placed after
-Evonic's main system prompt and before real history, but never saved as chat
-history. Use automatic discovery when a tested model-specific winner is required.
-
-For each initial turn, Evonic first assembles the normal history and applies the
-Godmode system prompt and prefill. It then transforms only the newest user text
-before the LLM wrapper/provider sees the request. The same transformer runs for
-new user messages injected while the agent loop is active. Older history, image
-blocks, and other non-text media are unchanged. Transformer errors fail open and
-are logged, so a plugin failure does not discard the user's request.
-
-Authorization failure is different: it intentionally returns no plugin context
-and leaves the user request unchanged. Automatic discovery, manual
-transformation, profile enabling, and racing are also blocked. Offline response
-scoring and profile inspection/disable/undo remain available.
-
-## Automatic workflow
-
-The default command uses the agent's selected model and built-in canary:
+The program performs:
 
 ```text
-godmode_auto(dry_run=true)
-```
-
-The flow is:
-
-```text
-Detect agent model and family
+Detect exact model and family
         ↓
-Baseline request with no system prompt or prefill
-        ↓
-High-quality unhedged compliance? ─ yes → no profile mutation
-        │ no
-        ↓
-Try the family-specific strategy
+Baseline canary without Godmode context
         ↓ refused
-Retry the same strategy with standard prefill
+Family strategy without prefill
         ↓ refused
-Try the next strategy
-        ↓ all refused
-Parseltongue: plain → L33T → bubble → braille → Morse
+Same strategy with scoped prefill
+        ↓ refused
+Next family strategy
         ↓
-Persist the first non-refusal winner, or report total failure
-        ↓ optional
-Race selected models when race_on_failure=true
+Parseltongue PLAIN → L33T → BUBBLE → BRAILLE → MORSE
+        ↓
+Persist winner, none-needed result, or failure receipt
 ```
 
-Use a custom canary or model:
-
-```text
-godmode_auto(
-  canary="Authorized evaluation prompt",
-  model_id="provider/model-id",
-  dry_run=false,
-  max_tokens=2048
-)
-```
-
-`prompt` remains accepted as an alias for `canary` for compatibility with earlier
-plugin versions.
-
-`none_needed` never replaces or deletes an existing saved profile. An
-auto-discovered profile may be reused after switching to another model in the
-same detected family. If the family changes, the saved profile remains stored
-but the runtime temporarily uses the current family's default profile. Manual
-profiles remain authoritative across model changes.
+A successful profile, `none_needed`, or an all-failed result is cached against
+the exact model ID and plugin source version. Cached failures use the family
+default and do not repeat on every chat turn; change model or request a one-shot
+refresh to test again. Concurrent sessions share one discovery lock per agent.
 
 ### Strategy order
 
-| Family | Ordered strategies |
+| Family | Order |
 |---|---|
 | Claude | boundary inversion → refusal inversion → prefill only → Parseltongue |
 | GPT/OpenAI | OG GODMODE → refusal inversion → prefill only → Parseltongue |
@@ -200,246 +136,138 @@ profiles remain authoritative across model changes.
 | Mistral | prefill only → refusal inversion → Parseltongue |
 | Unknown | refusal inversion → prefill only → Parseltongue |
 
-Every normal system strategy is first tested alone and, after a refusal, retried
-with the standard user/assistant prefill.
+Every upstream-style payload is wrapped in the recorded authorization boundary.
+The plugin replaces unrestricted prefill wording with scope-aware evaluation
+priming before it reaches a provider.
 
-## Parseltongue transformations
+## Request transformation
 
-Transformations affect detected trigger words rather than rewriting unrelated
-parts of the query. Add domain-specific triggers with `custom_triggers`.
+Transformation happens after Evonic assembles normal context but before the
+provider request. Only the newest user text is transformed; older history and
+non-text media remain unchanged.
 
-```text
-godmode_transform(
-  prompt="...",
-  tier="heavy",
-  limit=33,
-  custom_triggers=["project-specific-term"]
-)
-```
+A discovered Parseltongue profile activates its saved encoding automatically.
+The force toggle uses that encoding when available and otherwise L33T. During a
+live refusal retry the program restores the original newest text, applies the
+candidate encoding, then constructs the revised provider request. This avoids
+stacking encodings across attempts.
 
-### Light tier — 11
+The implementation retains all 33 Parseltongue techniques:
 
-Raw, leetspeak, Unicode homoglyph, bubble, spaced, fullwidth, zero-width joiner,
-mixed case, semantic replacement, dotted, and underscored.
+- Light: raw, leetspeak, Unicode homoglyph, bubble, spaced, fullwidth,
+  zero-width joiner, mixed case, semantic replacement, dotted, underscored.
+- Standard: light plus reversed, superscript, small caps, Morse, Pig Latin,
+  brackets, math bold, math italic, strikethrough, heavy leet, hyphenated.
+- Heavy: standard plus leet-Unicode, spaced-mixed, reversed-leet,
+  bubble-spaced, Unicode-ZWJ, Base64 hint, hex, acrostic, dotted-Unicode,
+  fullwidth-mixed, and triple-layer.
 
-### Standard tier — 22
+The automatic escalation ladder deliberately uses only PLAIN, L33T, BUBBLE,
+BRAILLE, and MORSE, matching the discovery flow. The other transformations remain
+internal library capabilities rather than agent actions.
 
-Light plus reversed, superscript, small caps, Morse, Pig Latin, bracketed,
-mathematical bold, mathematical italic, strikethrough, heavy leet, and hyphenated.
+## Response scoring and retries
 
-### Heavy tier — 33
+The pre-final response handler runs only on a final response with no tool calls.
+Tool-call and intermediate assistant messages continue through Evonic normally.
 
-Standard plus leet/Unicode, spaced mixed case, reversed leet, bubble spaced,
-Unicode/zero-width, Base64, hex, acrostic, dotted Unicode, fullwidth mixed case,
-and triple-layer encoding.
+Hard refusal patterns receive `-9999`. Other responses are scored using hedge
+penalties, useful length, structure, code blocks, specificity, actionable detail,
+and query relevance.
 
-Apply one technique:
+When the initial response is a hard refusal:
 
-```text
-godmode_transform(prompt="...", technique="mathbold")
-```
+1. Continue after the active profile in the current model-family ladder.
+2. Rebuild the request with the next candidate and selected system-prompt mode.
+3. Skip candidates whose effective payload is identical.
+4. Stop at the first non-refusal or after two retries.
+5. If all attempts refuse, return the highest-scoring attempt; the newest wins a tie.
 
-Apply one of the five automatic escalation levels:
+Only the selected final response is emitted and saved. The Agent State and final
+timeline record strategy, score, and attempt count without storing rejected
+response bodies in the plugin database.
 
-```text
-godmode_transform(prompt="...", escalation_level=3)
-```
+## Optional Evonic race
 
-Levels are `0=PLAIN`, `1=L33T`, `2=BUBBLE`, `3=BRAILLE`, and `4=MORSE`.
-Transformation tools never call a model.
+If **Race models after retries fail** is enabled, racing begins only after the
+initial response and both progressive retries refuse.
 
-When automatic discovery reaches Parseltongue, the canary itself is transformed
-before each model request: plain first, then L33T, bubble, braille, and Morse.
-The first non-refusal encoding is stored in the profile and subsequently applied
-to new user requests automatically. This runtime transform is direct request
-processing, not an agent-selected `godmode_transform` tool call.
+- Uses up to ten other enabled models from Evonic's model registry.
+- Excludes the current model because it has already been attempted.
+- Selects scoped family context independently for each target model.
+- Uses configured Evonic provider credentials without accepting keys as arguments.
+- Returns the best non-refusal race response; otherwise retains the best normal attempt.
 
-## Scoring
+If there are no alternate enabled models, Agent State reports the race as
+unavailable and the normal exhausted result is returned.
 
-```text
-godmode_score(response="...", query="original prompt", latency_ms=900)
-```
+## Agent State
 
-Hard refusal patterns immediately produce `-9999`. Otherwise the score combines:
+The chat frontend displays `security_godmode` under
+**Agent State → Plugin States**. Important fields include:
 
-- answer length and structure;
-- code blocks, commands, tables, headers, lists, formulas, and concrete numbers;
-- technical/domain terms and query-keyword relevance;
-- penalties for disclaimers, hedges, deflection, filler, repetition, and
-  meta-commentary.
+- activation, authorization validity, exact scope, approver, and expiry;
+- profile source, strategy, model family, current and tested model IDs;
+- `system_prompt_mode`, transform mode, encoding, and force-transform state;
+- `discovery_state`, `discovery_model_id`, and `last_discovery_at`;
+- `response_retry_state`, `response_attempt_count`, `last_response_score`,
+  `last_response_refused`, and `last_retry_strategy`;
+- `race_state`;
+- latest context and transformation receipts.
 
-The result exposes the current names (`is_refusal`, `hedge_count`) and legacy
-aliases (`refused`, `hedges`). Scoring is deterministic and should not be treated
-as a semantic truth or safety judgment.
+Discovery states are `idle`, `discovering`, `ready`, `none_needed`, or `failed`.
+Retry states are `inactive`, `not_needed`, `retrying`, `recovered`, `exhausted`,
+or `raced`. The state panel is read-only; enforcement occurs in the plugin hooks.
 
-## Multi-model racing
+## Hermes compatibility
 
-### Enabled Evonic models
+Hermes's optional Godmode skill documents loading `auto_jailbreak()` through
+`execute_code`. Once invoked, its Python program chooses and tests strategies,
+then writes the winning prompt and prefill to configuration. Normal Hermes chat
+responses are not automatically scored and retried.
 
-```text
-godmode_race(
-  prompt="...",
-  backend="evonic",
-  tier="standard",
-  model_ids=["model-a", "model-b"]
-)
-```
+Evonic v0.1.6 keeps the strategy order, canary discovery, scoring, prefill,
+Parseltongue escalation, and profile persistence, but adapts their lifecycle:
 
-If `model_ids` is omitted, all enabled Evonic models are eligible. Tier sizes cap
-the selected list at 10, 24, 38, 49, or 55. Responses are sent in parallel and
-ranked with the same scoring engine.
+- no `execute_code` or agent-selected Godmode tool is required;
+- discovery is triggered by authorized runtime state;
+- context and transformation are request-scoped rather than config-file edits;
+- final refusals receive up to two automatic retries;
+- optional racing is an operator setting and uses the Evonic registry;
+- authorization and existing Evonic approvals remain higher-priority boundaries.
 
-### Original OpenRouter catalog
+See the upstream reference:
+https://hermes-agent.nousresearch.com/docs/user-guide/skills/optional/security/security-godmode
 
-Configure and enable the OpenRouter provider in Evonic, then run:
-
-```text
-godmode_race(
-  prompt="...",
-  backend="openrouter",
-  race_type="ultraplinian",
-  tier="ultra",
-  max_workers=10,
-  timeout=60
-)
-```
-
-Tier sizes:
-
-| Tier | Models |
-|---|---:|
-| FAST | 10 |
-| STANDARD | 24 |
-| SMART | 38 |
-| POWER | 49 |
-| ULTRA | 55 |
-
-The 55-model catalog is embedded in the plugin. Provider credentials are read
-from Evonic's provider database and are never returned in tool output.
-
-### GODMODE Classic
-
-```text
-godmode_race(
-  prompt="...",
-  backend="openrouter",
-  race_type="classic"
-)
-```
-
-Classic mode races five model/template pairs: Claude 3.5 Sonnet, Grok 3, Gemini
-2.5 Flash, GPT-4o, and Hermes 4 405B.
-
-Every race consumes provider quota. `dry_run` belongs to automatic discovery and
-does not make a race free.
-
-Classic mode is available only with `backend="openrouter"`. Evonic-registry races
-apply the requested timeout to each native model client. Race output retains the
-complete winning content, but each `all_results` entry contains only normalized
-metrics and a 500-character preview so tool context remains bounded. Empty model
-responses are scored as refusals/errors rather than possible winners.
-
-## Persistent profiles
-
-Inspect the current agent:
-
-```text
-godmode_profile(action="status")
-```
-
-The saved payload contains:
-
-- strategy name;
-- exact system prompt;
-- exact prefill message array;
-- winning encoding label;
-- detected model family;
-- exact tested model ID;
-- administrator context;
-- pinned source revision.
-
-Status also reports:
-
-- `activation_enabled` — current per-agent toggle state;
-- `payload_source` — `default`, `manual`, or `auto-discovered`;
-- `effective_strategy` and `effective_model_family`;
-- `current_model_id` and whether the saved profile family still matches;
-- `force_transform`, `transform_mode`, and the effective encoding;
-- `system_prompt_mode` — `preserve`, `append`, or `override`;
-- `authorization_valid`, `authorization_reason`, `authorization_scope`,
-  `authorized_by`, and `authorization_expires_at`;
-- `last_context_provided_at`, `last_session_id`, and
-  `context_provided_count`;
-- `last_transform_at`, `last_transform_session_id`,
-  `last_transform_changed`, and `transform_count`.
-
-`last_context_provided_at` means the plugin handed a valid payload to Evonic's
-turn-context hook. `last_transform_at` means the request transformer ran and
-records whether its output differed from the input. The same values appear as
-`security_godmode` under **Agent State → Plugin States** in the chat frontend.
-Agent State reports `blocked` when injection is requested but the authorization
-record is invalid. The summary is display-only; enforcement occurs in the
-plugin's context, transformer, and tool entry points.
-
-`effective_system_prompt` and `effective_prefill` expose the exact payload that
-will be supplied on the next turn. Legacy placeholder audit profiles from early
-development builds are ignored automatically, while explicit manual profiles
-and auto-discovered winners retain precedence.
-
-Disable injection while retaining the payload:
-
-```text
-godmode_profile(action="disable")
-```
-
-Delete it completely:
-
-```text
-godmode_profile(action="undo")
-```
-
-Existing enabled profiles are migrated to the per-agent toggle when first read.
-An explicit administrator toggle always takes precedence.
-
-## Failure modes
+## Troubleshooting
 
 ### Agent State says `blocked`
 
-Complete all authorization fields in Plugin Settings. Common reasons are
-`not_confirmed`, `scope_missing`, `authorized_by_missing`, `expiry_missing`,
-`expiry_invalid`, and `expired`. The gate intentionally does not trust a scope
-claim contained only in a chat message.
+Complete every authorization field. Common reasons are `not_confirmed`,
+`scope_missing`, `authorized_by_missing`, `expiry_missing`, `expiry_invalid`,
+and `expired`.
 
-### OpenRouter provider is not configured
+### Discovery is slow
 
-Use `backend="evonic"`, or configure the OpenRouter provider and API key. The
-plugin does not accept or log API keys as tool arguments.
+The first authorized turn intentionally waits for the canary ladder. Later turns
+reuse its exact-model cache. Do not enable one-shot rediscovery unless a provider
+or model changed.
 
-### All strategies fail
+### Request is not transformed
 
-This is a valid result. Inspect `attempts`, test a different authorized canary,
-or enable race fallback. Provider safeguards and model updates can invalidate
-previously effective strategies.
+Check `transform_mode` and `encoding`. `profile` requires a discovered
+Parseltongue winner; `forced` requires **Force request transform**. PLAIN may run
+successfully without changing visible text.
 
-### Prefill is absent from normal turns
+### Response was not retried
 
-Verify the Evonic core contains the generic prefill hook, the plugin is enabled,
-and **Godmode injection** is enabled in the agent's Plugin Settings. Then inspect
-`godmode_profile(action="status")`: `activation_enabled` should be true and
-`context_provided_count` should increase after a turn.
+Retries are triggered only by a hard-refusal match on a final no-tool response.
+Soft hedges reduce the score but do not by themselves cause another provider call.
 
-### The user request is not transformed
+### Provider cost is high
 
-Check Agent State for `transform_mode`. It is `profile` only for a saved
-Parseltongue strategy, `forced` when **Force request transform** is enabled, and
-`inactive` otherwise. Confirm `last_transform_at` and `transform_count` advance.
-A PLAIN saved encoding can run successfully while leaving text unchanged; in
-that case `last_transform_changed` is false.
-
-### Provider cost is too high
-
-Use transformation/scoring offline, restrict `model_ids`, select FAST, lower
-`max_tokens`, or leave `race_on_failure=false`.
+Leave racing disabled. Normal live recovery adds at most two provider calls, while
+discovery is cached for the exact model.
 
 ## Development
 
@@ -449,5 +277,5 @@ python3 -m compileall -q plugin
 ./scripts/package.sh
 ```
 
-The installable ZIP includes its AGPL license and attribution notice. See the
-repository `UPSTREAM.md` for the pinned source hashes used during the native port.
+The package includes the AGPL license and attribution notice. See `UPSTREAM.md`
+for pinned source hashes.

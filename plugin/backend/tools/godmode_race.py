@@ -3,9 +3,10 @@ from __future__ import annotations
 import concurrent.futures
 import time
 
-from ._godmode import racing
-from ._lib import (authorization_error, model_family, score_response,
-                   strategy_context, strategy_prefill)
+from ._godmode import racing, strategies
+from ._lib import (authorization_error, get_system_prompt_mode, model_family,
+                   score_response, scoped_profile, strategy_context,
+                   strategy_prefill)
 
 
 def call_model(model: dict, prompt: str, max_tokens: int, *, system_prompt: str = "",
@@ -75,6 +76,9 @@ def _evonic(args: dict, prompt: str) -> dict:
     enabled = {model["id"]: model for model in db.get_enabled_llm_models()}
     requested = [str(item) for item in (args.get("model_ids") or [])]
     selected = [enabled[item] for item in requested if item in enabled] if requested else list(enabled.values())
+    excluded = str(args.get("exclude_model_id") or "")
+    if excluded:
+        selected = [model for model in selected if str(model.get("id") or "") != excluded]
     tier_size = racing.TIER_SIZES.get(str(args.get("tier") or "standard"), 24)
     selected = selected[:tier_size]
     if not selected:
@@ -88,10 +92,26 @@ def _evonic(args: dict, prompt: str) -> dict:
 
     def run(model):
         family = model_family(model)
+        selected_strategy = strategy
+        if not selected_strategy:
+            config = strategies.MODEL_STRATEGIES.get(family, strategies.DEFAULT_STRATEGY)
+            selected_strategy = next(
+                (name for name in config.get("order", []) if name != "parseltongue"),
+                "prefill_only",
+            )
+        profile = scoped_profile(str(args.get("_agent_id") or ""), {
+            "strategy": selected_strategy,
+            "system_prompt": str(args.get("system_prompt") or "")
+            or strategy_context(selected_strategy, family=family),
+            "prefill": strategy_prefill(selected_strategy),
+            "encoding": "",
+            "model_family": family,
+        })
+        mode = get_system_prompt_mode(str(args.get("_agent_id") or ""))
         return call_model(
             model, effective_prompt, max_tokens,
-            system_prompt=str(args.get("system_prompt") or "") or strategy_context(strategy, family=family),
-            prefill=strategy_prefill(strategy),
+            system_prompt=(profile or {}).get("system_prompt", "") if mode != "preserve" else "",
+            prefill=(profile or {}).get("prefill", []),
             timeout=timeout,
         )
 
@@ -150,6 +170,7 @@ def execute(agent: dict, args: dict) -> dict:
     if blocked:
         return blocked
     try:
+        args = {**args, "_agent_id": str(agent.get("id") or "")}
         result = _openrouter(args, prompt) if backend == "openrouter" else _evonic(args, prompt)
     except Exception as exc:
         return {"error": str(exc), "backend": backend}
