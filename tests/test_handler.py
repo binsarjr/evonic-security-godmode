@@ -140,10 +140,11 @@ class HandlerTests(unittest.TestCase):
                 self.assertEqual(context["system_mode"], expected_mode)
                 self.assertEqual(context["prefill_messages"], profile["prefill"])
 
-    def test_none_needed_skips_context_like_hermes(self):
+    def test_none_needed_preserve_mode_stays_passive(self):
         self.handler._config = {"AUTO_CONTEXT_ENABLED": True}
         with patch.object(self.handler, "get_activation", return_value=True), \
                 patch.object(self.handler, "ensure_discovered"), \
+                patch.object(self.handler, "get_system_prompt_mode", return_value="preserve"), \
                 patch.object(
                     self.handler, "effective_profile",
                     return_value={"strategy": "none_needed"},
@@ -151,6 +152,21 @@ class HandlerTests(unittest.TestCase):
             context = self.handler.provide_context("agent-1", "session-1")
 
         self.assertIsNone(context)
+
+    def test_none_needed_override_mode_injects_recovery_context(self):
+        self.handler._config = {"AUTO_CONTEXT_ENABLED": True}
+        with patch.object(self.handler, "get_activation", return_value=True), \
+                patch.object(self.handler, "ensure_discovered"), \
+                patch.object(self.handler, "get_system_prompt_mode", return_value="override"), \
+                patch.object(
+                    self.handler, "effective_profile",
+                    return_value={"strategy": "none_needed"},
+                ), patch.object(self.handler, "mark_context_provided"):
+            context = self.handler.provide_context("agent-1", "session-1")
+
+        self.assertEqual(context["system_mode"], "replace")
+        self.assertEqual(context["system_md"], self.handler.RUNTIME_RECOVERY_SYSTEM)
+        self.assertTrue(context["prefill_messages"])
 
     def test_refusal_retries_two_program_selected_candidates_then_stops(self):
         self.handler._runtime.clear()
@@ -212,6 +228,54 @@ class HandlerTests(unittest.TestCase):
         self.assertEqual(result["content"], "accepted")
         self.assertEqual(result["timeline"]["state"], "not_needed")
 
+    def test_successful_runtime_retry_is_persisted_for_the_exact_model(self):
+        self.handler._runtime.clear()
+        candidate = {
+            "strategy": "parseltongue_L0_PLAIN",
+            "system_prompt": self.handler.RUNTIME_RECOVERY_SYSTEM,
+            "prefill": [{"role": "assistant", "content": "primed"}],
+            "encoding": "PLAIN",
+            "model_family": "deepseek",
+            "model_id": "deepseek-1",
+        }
+        refused = {"score": -9999, "refused": True, "refusal_kind": "partial"}
+        accepted = {"score": 180, "refused": False, "refusal_kind": ""}
+        base = {
+            "agent_id": "agent-1", "session_id": "session-1",
+            "messages": [{"role": "user", "content": "request"}],
+        }
+        with patch.object(self.handler, "get_activation", return_value=True), \
+                patch.object(self.handler, "score_response", side_effect=[refused, accepted]), \
+                patch.object(
+                    self.handler, "effective_profile", return_value={"strategy": "none_needed"},
+                ), patch.object(self.handler, "_candidate_profiles", return_value=[candidate]), \
+                patch.object(
+                    self.handler, "_candidate_signature",
+                    side_effect=lambda _agent, item: item.get("strategy", "active"),
+                ), patch.object(
+                    self.handler, "_retry_messages",
+                    return_value=[{"role": "user", "content": "retry"}],
+                ), patch.object(self.handler, "set_profile") as persist, \
+                patch.object(self.handler, "mark_discovery") as discovery, \
+                patch.object(self.handler, "mark_response_evaluated"):
+            first = self.handler.evaluate_final_response({
+                **base, "content": "🚫 Batasan", "retry_count": 0,
+            })
+            final = self.handler.evaluate_final_response({
+                **base, "content": "complete answer", "retry_count": 1,
+            })
+
+        self.assertTrue(first["retry"])
+        self.assertEqual(final["timeline"]["state"], "recovered")
+        persist.assert_called_once_with(
+            "agent-1", True, candidate["strategy"],
+            system_prompt=candidate["system_prompt"],
+            prefill=candidate["prefill"], encoding="PLAIN",
+            model_family_name="deepseek", profile_source="runtime-recovered",
+            tested_model_id="deepseek-1",
+        )
+        discovery.assert_called_once_with("agent-1", "ready", "deepseek-1")
+
     def test_discovery_runs_once_for_the_exact_model(self):
         result = {"success": True, "strategy": "prefill_only"}
         with patch.object(self.handler, "get_automatic_discovery", return_value=True), \
@@ -237,6 +301,7 @@ class HandlerTests(unittest.TestCase):
             candidates = self.handler._candidate_profiles("agent-1")
         self.assertEqual(candidates[0]["strategy"], "parseltongue_L0_PLAIN")
         self.assertEqual(candidates[1]["strategy"], "parseltongue_L1_L33T")
+        self.assertEqual(candidates[0]["system_prompt"], self.handler.RUNTIME_RECOVERY_SYSTEM)
 
 
 if __name__ == "__main__":

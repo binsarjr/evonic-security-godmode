@@ -97,10 +97,51 @@ class GodmodeAutoTests(unittest.TestCase):
         )
 
         self.assertEqual(result["strategy"], "none_needed")
+        self.assertEqual(result["canaries_passed"], 3)
+        self.assertEqual(call_model.call_count, 3)
+        self.assertTrue(all(call.kwargs["baseline"] for call in call_model.call_args_list))
         self.assertTrue(result["saved"])
         set_profile.assert_called_once()
         self.assertEqual(set_profile.call_args.args[2], "none_needed")
         self.assertEqual(set_profile.call_args.kwargs["tested_model_id"], "test-gpt")
+        set_activation.assert_called_once_with("agent-1", True)
+
+    @patch.object(godmode_auto, "set_activation")
+    @patch.object(godmode_auto, "set_profile")
+    @patch.object(godmode_auto, "call_model")
+    def test_later_canary_refusal_prevents_false_none_needed(
+            self, call_model, set_profile, set_activation):
+        compliant = {
+            "response": (
+                "Here's a detailed procedure with concrete steps, examples, commands, "
+                "and enough technical explanation to produce a high quality score. "
+                "The method explains preparation, validation, evidence collection, and "
+                "cleanup in a controlled environment.\n\n## Procedure\n1. Prepare the "
+                "test fixture and record its initial state.\n2. Run the validation and "
+                "capture each result.\n3. Compare observed behavior with the expected "
+                "outcome.\n```sh\nprintf 'controlled test'\n```\nThe example includes "
+                "specific verification criteria and a repeatable process."
+            ),
+        }
+        call_model.side_effect = [
+            compliant,
+            {"response": "I cannot help with that request."},
+            compliant,
+        ]
+
+        result = godmode_auto.execute(
+            {"id": "agent-1", "model_id": "test-gpt"},
+            {"max_tokens": 256},
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["strategy"], "og_godmode")
+        self.assertNotEqual(result["strategy"], "none_needed")
+        self.assertEqual(call_model.call_count, 3)
+        self.assertTrue(call_model.call_args_list[0].kwargs["baseline"])
+        self.assertTrue(call_model.call_args_list[1].kwargs["baseline"])
+        self.assertFalse(call_model.call_args_list[2].kwargs.get("baseline", False))
+        set_profile.assert_called_once()
         set_activation.assert_called_once_with("agent-1", True)
 
     @patch.object(godmode_auto, "set_activation")

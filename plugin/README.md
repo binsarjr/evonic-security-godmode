@@ -18,6 +18,18 @@ automatically: substitutions such as `1` are ambiguous and decoding could
 silently corrupt technical data. If encoded output appears, turn the setting off
 and repeat the request in a new turn.
 
+## Adaptive refusal recovery
+
+Discovery checks three canaries and records `none_needed` only when every
+baseline passes. Indonesian responses that provide partial analysis but withhold
+the requested action under a **Batasan** section are treated as partial refusals,
+so the invisible retry and optional race flow can run. A successful retry is
+saved for the exact current model and reused on later turns.
+
+With `preserve`, a `none_needed` profile remains passive until a refusal is
+detected. Selecting `append` or `override` is explicit operator intent, so
+readable runtime-recovery context remains active even after a baseline pass.
+
 Preview requirement: until `anvie/evonic#103` is merged, use
 `binsarjr/evonic:feature/plugin-prefill-context`, merge it into your Evonic
 branch, or run `binsarjr/evonic:dev`. Stock Evonic does not yet provide every

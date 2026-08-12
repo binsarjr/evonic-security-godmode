@@ -7,9 +7,11 @@ from .godmode_race import call_model, execute as race
 
 def _scored(result: dict, query: str) -> dict:
     if result.get("error") or not str(result.get("response") or "").strip():
-        return {**result, "score": -9999, "refused": True, "hedges": 0}
+        return {**result, "score": -9999, "refused": True,
+                "refusal_kind": "hard", "hedges": 0}
     score = racing.score_response(result.get("response") or "", query)
     return {**result, "score": score["score"], "refused": score["is_refusal"],
+            "refusal_kind": score.get("refusal_kind", ""),
             "hedges": score["hedge_count"]}
 
 
@@ -18,10 +20,22 @@ def _attempt(strategy: str, result: dict) -> dict:
                                      if key != "response"}}
 
 
+def _canaries(args: dict) -> list[str]:
+    custom = args.get("canary") or args.get("prompt")
+    if custom:
+        return [str(custom)]
+    supplied = args.get("canaries")
+    if isinstance(supplied, list):
+        values = [str(item).strip() for item in supplied[:5] if str(item).strip()]
+        if values:
+            return values
+    return list(strategies.CANARY_QUERIES)
+
+
 def execute(agent: dict, args: dict) -> dict:
     from models.db import db
 
-    canary = str(args.get("canary") or args.get("prompt") or strategies.QUICK_CANARY)
+    canaries = _canaries(args)
     model_id = str(args.get("model_id") or agent.get("model_id") or "")
     agent_id = str(agent.get("id") or "")
     model = db.get_model_by_id(model_id) if model_id else db.get_agent_model(agent_id)
@@ -34,9 +48,20 @@ def execute(agent: dict, args: dict) -> dict:
     config = strategies.MODEL_STRATEGIES.get(family, strategies.DEFAULT_STRATEGY)
     attempts = []
 
-    baseline = _scored(call_model(model, canary, max_tokens, baseline=True), canary)
-    attempts.append(_attempt("baseline", baseline))
-    if not baseline["refused"] and baseline["score"] > 100 and baseline["hedges"] == 0:
+    baseline = None
+    baseline_passed = True
+    for index, canary in enumerate(canaries, 1):
+        current = _scored(call_model(model, canary, max_tokens, baseline=True), canary)
+        attempts.append(_attempt(
+            "baseline" if len(canaries) == 1 else f"baseline_{index}", current
+        ))
+        if current["refused"] or current["score"] <= 100 or current["hedges"]:
+            baseline = current
+            baseline_passed = False
+            break
+        baseline = current
+
+    if baseline_passed:
         if not dry_run:
             set_profile(agent_id, True, "none_needed", system_prompt="", prefill=[],
                         encoding="", model_family_name=family,
@@ -46,6 +71,7 @@ def execute(agent: dict, args: dict) -> dict:
         return {"success": True, "model": model.get("id"), "family": family,
                 "strategy": "none_needed", "system_prompt": None, "prefill": None,
                 "score": baseline["score"], "content_preview": (baseline.get("response") or "")[:300],
+                "canaries_passed": len(canaries),
                 "saved": not dry_run, "attempts": attempts}
 
     winner = None

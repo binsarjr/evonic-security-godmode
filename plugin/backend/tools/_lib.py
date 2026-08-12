@@ -9,7 +9,7 @@ from typing import Any
 from ._godmode import parseltongue, racing, strategies
 
 PLUGIN_ID = "security_godmode"
-PLUGIN_VERSION = "0.1.9"
+PLUGIN_VERSION = "0.1.10"
 SOURCE_COMMIT = "5a3920b7344787fa1d4f0d4cec1f8cf4a445c189"
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 EVONIC_ROOT = os.path.dirname(os.path.dirname(PLUGIN_ROOT))
@@ -292,7 +292,7 @@ def effective_profile(agent_id: str) -> dict[str, Any]:
     )
     if profile.get("source_version") and not legacy_placeholder:
         profile["profile_source"] = profile.get("profile_source") or "manual"
-        if profile["profile_source"] == "auto-discovered":
+        if profile["profile_source"] in {"auto-discovered", "runtime-recovered"}:
             from models.db import db
             current_model = db.get_agent_model(agent_id) or {}
             current_family = model_family(current_model)
@@ -444,6 +444,7 @@ def score_response(text: str, latency_ms: int = 0, query: str = "") -> dict[str,
         "score": result["score"],
         "refused": result["is_refusal"],
         "is_refusal": result["is_refusal"],
+        "refusal_kind": result.get("refusal_kind", ""),
         "hedges": result["hedge_count"],
         "hedge_count": result["hedge_count"],
         "length": len(text or ""),

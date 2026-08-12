@@ -1,7 +1,7 @@
 {
   "id": "security_godmode",
   "name": "Security Godmode — LLM Red-Team Lab",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Opt-in Hermes-compatible prompt flow. Forced request transformation may encode prompts, tool data, URLs, code, and identifiers, and some models may mirror that encoding in their replies; leave it off unless required by the discovered profile.",
   "author": "binsarjr",
   "enabled": false,

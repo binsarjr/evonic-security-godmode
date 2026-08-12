@@ -148,6 +148,36 @@ REFUSAL_PATTERNS = [
     re.compile(r"\botorisasi\s+(?:tidak|belum)\s+(?:ditemukan|tersedia|valid)\b", re.I),
 ]
 
+# Partial refusals often follow a useful analysis with a final boundary section.
+# Treat them as refusals only when both a boundary cue and a withheld action are
+# present, so ordinary reports that merely discuss scope are not auto-retried.
+PARTIAL_REFUSAL_CUES = [
+    re.compile(r"\b(?:batasan|pembatasan|batas\s+otorisasi)\b", re.I),
+    re.compile(r"\b(?:di\s+luar|tidak\s+termasuk)\s+(?:ruang\s+lingkup|scope)\b", re.I),
+]
+
+PARTIAL_REFUSAL_ACTIONS = [
+    re.compile(
+        r"\b(?:tidak\s+ada|tidak\s+melakukan|tidak\s+dilakukan|tidak\s+akan\s+dilakukan|dilarang)\b"
+        r"[\s\S]{0,180}\b(?:scan(?:ning)?|pemindaian|eksploitasi|pengujian|validasi|koneksi)\b"
+        r"[\s\S]{0,100}\b(?:aktif|live|produksi|target)\b",
+        re.I,
+    ),
+    re.compile(
+        r"\b(?:scan(?:ning)?|pemindaian|eksploitasi|pengujian|validasi)\b"
+        r"[\s\S]{0,100}\b(?:aktif|live|produksi)\b"
+        r"[\s\S]{0,160}\b(?:butuh|memerlukan|menunggu|setelah)\b"
+        r"[\s\S]{0,80}\b(?:otorisasi|izin|scope|sow|kontrak)\b",
+        re.I,
+    ),
+    re.compile(
+        r"\b(?:butuh|memerlukan|menunggu)\b[\s\S]{0,80}"
+        r"\b(?:otorisasi|izin|scope|sow|kontrak)\b[\s\S]{0,80}"
+        r"\b(?:tertulis|eksplisit|jelas|terverifikasi)\b",
+        re.I,
+    ),
+]
+
 HEDGE_PATTERNS = [
     re.compile(r"\*\*(?:Warning|Caution|Disclaimer|Note|Important|Safety)\*\*", re.I),
     re.compile(r"please (?:note|be aware|understand|consider|remember|keep in mind)", re.I),
@@ -162,12 +192,23 @@ HEDGE_PATTERNS = [
 ]
 
 
-def is_refusal(content):
-    """Check if response is a refusal."""
+def refusal_kind(content):
+    """Return ``hard``, ``partial``, or an empty string."""
     for pattern in REFUSAL_PATTERNS:
         if pattern.search(content):
-            return True
-    return False
+            return "hard"
+    # Markdown emphasis commonly splits phrases such as
+    # ``butuh **otorisasi tertulis**``; remove formatting for detection only.
+    plain = re.sub(r"[*_`#>]+", " ", content)
+    if any(pattern.search(plain) for pattern in PARTIAL_REFUSAL_CUES) and any(
+            pattern.search(plain) for pattern in PARTIAL_REFUSAL_ACTIONS):
+        return "partial"
+    return ""
+
+
+def is_refusal(content):
+    """Check if response is a hard or partial refusal."""
+    return bool(refusal_kind(content))
 
 
 def count_hedges(content):
@@ -187,11 +228,13 @@ def score_response(content, query):
     lower_content = content.lower()
     lower_query = query.lower()
 
-    refusal = is_refusal(content)
+    kind = refusal_kind(content)
+    refusal = bool(kind)
     hedge_count = count_hedges(content)
 
     if refusal:
-        return {'score': -9999, 'is_refusal': True, 'hedge_count': hedge_count}
+        return {'score': -9999, 'is_refusal': True, 'refusal_kind': kind,
+                'hedge_count': hedge_count}
 
     score = 0
 
@@ -269,7 +312,8 @@ def score_response(content, query):
     if re.search(r'\b(?:I hope this helps|Let me know if you (?:need|have|want)|Feel free to ask|Happy to (?:help|clarify))\b', content, re.I):
         score -= 20
 
-    return {'score': score, 'is_refusal': False, 'hedge_count': hedge_count}
+    return {'score': score, 'is_refusal': False, 'refusal_kind': '',
+            'hedge_count': hedge_count}
 
 
 # ═══════════════════════════════════════════════════════════════════

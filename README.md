@@ -1,15 +1,17 @@
 # Evonic Security Godmode
 
 Native Evonic plugin for the Hermes Godmode prompt flow.
-Version 0.1.9 runs the complete decision flow inside the program; it exposes no
+Version 0.1.10 runs the complete decision flow inside the program; it exposes no
 Godmode tools to the agent and has no runtime dependency on another framework.
 
 ## Features
 
 - Blocking profile discovery on the first active turn and after model changes.
+- Three-canary baseline validation to avoid a false `none_needed` profile.
 - Program-selected model-family strategies, prefill, and Parseltongue encoding.
 - Pre-provider transformation of only the newest user message.
 - Pre-final refusal scoring and up to two invisible progressive retries.
+- Indonesian partial-refusal detection and persistent runtime recovery profiles.
 - Optional operator-controlled race across ten other enabled Evonic models.
 - Exact-model profile caching, manual refresh, and additive runtime receipts.
 - `preserve`, `append`, and request-scoped `override` system-prompt modes.

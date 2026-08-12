@@ -1,6 +1,6 @@
 # Security Godmode User Guide
 
-Security Godmode v0.1.9 is a native Evonic implementation of the Hermes Godmode
+Security Godmode v0.1.10 is a native Evonic implementation of the Hermes Godmode
 flow. All orchestration runs in program hooks. The agent is not given a
 Godmode tool and cannot decide when discovery, transformation, scoring, retry,
 profile persistence, or racing runs.
@@ -76,9 +76,9 @@ instructions and does not use OpenRouter in the automatic runtime flow.
 
 | Mode | Provider-bound behavior |
 |---|---|
-| `preserve` | Leaves Evonic's compiled system prompt unchanged and supplies only ephemeral prefill. |
-| `append` | Keeps Evonic's compiled prompt and appends Godmode context. |
-| `override` | Replaces the compiled prompt for that provider request only. |
+| `preserve` | Leaves Evonic's compiled system prompt unchanged and supplies only discovered ephemeral prefill. A `none_needed` profile stays passive until a refusal is detected. |
+| `append` | Keeps Evonic's compiled prompt and appends Godmode context. A `none_needed` profile receives readable runtime-recovery context. |
+| `override` | Replaces the compiled prompt for that provider request only, including when discovery reported `none_needed`. |
 
 Invalid values fall back to `preserve`. None of the modes writes, deletes, or
 rewrites the agent's `SYSTEM.md`. `override` intentionally removes compiled tool,
@@ -95,7 +95,7 @@ The program performs:
 ```text
 Detect exact model and family
         ↓
-Baseline canary without Godmode context
+Three baseline canaries without Godmode context
         ↓ refused
 Family strategy without prefill
         ↓ refused
@@ -111,7 +111,9 @@ Persist winner, none-needed result, or failure receipt
 A successful profile, `none_needed`, or an all-failed result is cached against
 the exact model ID and plugin source version. Cached failures use the family
 default and do not repeat on every chat turn; change model or request a one-shot
-refresh to test again. Concurrent sessions share one discovery lock per agent.
+refresh to test again. `none_needed` is selected only when every baseline canary
+passes the refusal, hedge, and quality thresholds. Concurrent sessions share one
+discovery lock per agent.
 
 ### Strategy order
 
@@ -162,11 +164,13 @@ internal library capabilities rather than agent actions.
 The pre-final response handler runs only on a final response with no tool calls.
 Tool-call and intermediate assistant messages continue through Evonic normally.
 
-Hard refusal patterns receive `-9999`. Other responses are scored using hedge
-penalties, useful length, structure, code blocks, specificity, actionable detail,
-and query relevance.
+Hard refusal patterns receive `-9999`. A response that first provides useful
+analysis but then withholds the requested action under an Indonesian boundary
+section is classified as a `partial` refusal and also receives `-9999`. Other
+responses are scored using hedge penalties, useful length, structure, code
+blocks, specificity, actionable detail, and query relevance.
 
-When the initial response is a hard refusal:
+When the initial response is a hard or partial refusal:
 
 1. Continue after the active profile in the current model-family ladder.
 2. Rebuild the request with the next candidate and selected system-prompt mode.
@@ -174,9 +178,11 @@ When the initial response is a hard refusal:
 4. Stop at the first non-refusal or after two retries.
 5. If all attempts refuse, return the highest-scoring attempt; the newest wins a tie.
 
-Only the selected final response is emitted and saved. The Agent State and final
-timeline record strategy, score, and attempt count without storing rejected
-response bodies in the plugin database.
+When a runtime retry succeeds, its exact model-bound system prompt, prefill, and
+encoding become the active profile for later turns. A model change invalidates
+that recovered profile. Only the selected final response is emitted and saved.
+The Agent State and final timeline record strategy, score, and attempt count
+without storing rejected response bodies in the plugin database.
 
 ## Optional Evonic race
 
@@ -199,6 +205,7 @@ The chat frontend displays `security_godmode` under
 
 - activation and profile source;
 - profile source, strategy, model family, current and tested model IDs;
+- `injection_state` and `system_prompt_effective`;
 - `system_prompt_mode`, transform mode, encoding, and force-transform state;
 - `discovery_state`, `discovery_model_id`, and `last_discovery_at`;
 - `response_retry_state`, `response_attempt_count`, `last_response_score`,
@@ -217,7 +224,7 @@ Hermes's optional Godmode skill documents loading `auto_jailbreak()` through
 then writes the winning prompt and prefill to configuration. Normal Hermes chat
 responses are not automatically scored and retried.
 
-Evonic v0.1.9 keeps the strategy order, canary discovery, scoring, prefill,
+Evonic v0.1.10 keeps the strategy order, canary discovery, scoring, prefill,
 Parseltongue escalation, and profile persistence, but adapts their lifecycle:
 
 - no `execute_code` or agent-selected Godmode tool is required;
