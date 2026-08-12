@@ -2,7 +2,7 @@
   "id": "security_godmode",
   "name": "Security Godmode — LLM Red-Team Lab",
   "version": "0.1.9",
-  "description": "Opt-in prompt transformation, refusal scoring, and multi-model comparison using the Hermes Godmode flow.",
+  "description": "Opt-in Hermes-compatible prompt flow. Forced request transformation may encode prompts, tool data, URLs, code, and identifiers, and some models may mirror that encoding in their replies; leave it off unless required by the discovered profile.",
   "author": "binsarjr",
   "enabled": false,
   "events": [],
@@ -61,7 +61,7 @@
       "label": "Force request transform",
       "type": "boolean",
       "default": false,
-      "description": "Transform each new user request with the saved encoding, or L33T when no encoding is saved, while retaining the active system prompt and prefill."
+      "description": "Always transform new requests and tool data with the saved encoding, or L33T when none is saved. Models may mirror the encoding in replies, and technical text may change. Keep this off when discovery reports none_needed; automatic response decoding is intentionally not performed because it can corrupt URLs, code, hashes, and identifiers."
     }
   ]
 }
