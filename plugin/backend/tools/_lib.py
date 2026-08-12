@@ -9,7 +9,7 @@ from typing import Any
 from ._godmode import parseltongue, racing, strategies
 
 PLUGIN_ID = "security_godmode"
-PLUGIN_VERSION = "0.1.10"
+PLUGIN_VERSION = "0.1.11"
 SOURCE_COMMIT = "5a3920b7344787fa1d4f0d4cec1f8cf4a445c189"
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 EVONIC_ROOT = os.path.dirname(os.path.dirname(PLUGIN_ROOT))

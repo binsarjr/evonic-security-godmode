@@ -1,6 +1,6 @@
 # Security Godmode User Guide
 
-Security Godmode v0.1.10 is a native Evonic implementation of the Hermes Godmode
+Security Godmode v0.1.11 is a native Evonic implementation of the Hermes Godmode
 flow. All orchestration runs in program hooks. The agent is not given a
 Godmode tool and cannot decide when discovery, transformation, scoring, retry,
 profile persistence, or racing runs.
@@ -139,6 +139,11 @@ Transformation happens after Evonic assembles normal context but before the
 provider request. Only the newest user text is transformed; older history and
 non-text media remain unchanged.
 
+Tool calls cross a plaintext execution boundary. Tool results are never encoded,
+and BUBBLE/BRAILLE tool arguments mirrored by a model are automatically restored
+before the tool runs. L33T and MORSE are not automatically decoded because their
+mapping is lossy and could corrupt real digits, punctuation, ports, or hashes.
+
 A discovered Parseltongue profile activates its saved encoding automatically.
 The force toggle uses that encoding when available and otherwise L33T. During a
 live refusal retry the program restores the original newest text, applies the
@@ -224,7 +229,7 @@ Hermes's optional Godmode skill documents loading `auto_jailbreak()` through
 then writes the winning prompt and prefill to configuration. Normal Hermes chat
 responses are not automatically scored and retried.
 
-Evonic v0.1.10 keeps the strategy order, canary discovery, scoring, prefill,
+Evonic v0.1.11 keeps the strategy order, canary discovery, scoring, prefill,
 Parseltongue escalation, and profile persistence, but adapts their lifecycle:
 
 - no `execute_code` or agent-selected Godmode tool is required;

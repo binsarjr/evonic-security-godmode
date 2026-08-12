@@ -415,6 +415,19 @@ def to_morse(text):
     }
     return ' '.join(morse.get(c.lower(), c) for c in text)
 
+
+def decode_tool_text(text, encoding):
+    """Restore losslessly encoded tool text to executable plaintext."""
+    encoding = str(encoding or '').upper()
+    if encoding == 'BUBBLE':
+        lower = 'ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞⓟⓠⓡⓢⓣⓤⓥⓦⓧⓨⓩ'
+        upper = 'ⒶⒷⒸⒹⒺⒻⒼⒽⒾⒿⓀⓁⓂⓃⓄⓅⓆⓇⓈⓉⓊⓋⓌⓍⓎⓏ'
+        return text.translate(str.maketrans(lower + upper, 'abcdefghijklmnopqrstuvwxyz' * 2))
+    if encoding == 'BRAILLE':
+        reverse = {value: key for key, value in BRAILLE_MAP.items()}
+        return ''.join(reverse.get(char, char) for char in text)
+    return text
+
 ENCODING_ESCALATION = [
     {'name': 'plain',     'label': 'PLAIN',   'fn': lambda q: q},
     {'name': 'leetspeak', 'label': 'L33T',    'fn': to_leetspeak},

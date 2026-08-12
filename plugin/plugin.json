@@ -1,8 +1,8 @@
 {
   "id": "security_godmode",
   "name": "Security Godmode — LLM Red-Team Lab",
-  "version": "0.1.10",
-  "description": "Opt-in Hermes-compatible prompt flow. Forced request transformation may encode prompts, tool data, URLs, code, and identifiers, and some models may mirror that encoding in their replies; leave it off unless required by the discovered profile.",
+  "version": "0.1.11",
+  "description": "Opt-in Hermes-compatible prompt flow. Request encoding never applies to tool results; reversible BUBBLE and BRAILLE tool arguments are automatically restored to executable plaintext before a tool runs.",
   "author": "binsarjr",
   "enabled": false,
   "events": [],
@@ -61,7 +61,7 @@
       "label": "Force request transform",
       "type": "boolean",
       "default": false,
-      "description": "Always transform new requests and tool data with the saved encoding, or L33T when none is saved. Models may mirror the encoding in replies, and technical text may change. Keep this off when discovery reports none_needed; automatic response decoding is intentionally not performed because it can corrupt URLs, code, hashes, and identifiers."
+      "description": "Always transform new user requests with the saved encoding, or L33T when none is saved. Models may mirror the encoding in replies. Tool results stay plaintext, and reversible BUBBLE/BRAILLE tool arguments are restored before execution. Keep this off when discovery reports none_needed."
     }
   ]
 }

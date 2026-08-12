@@ -87,37 +87,61 @@ class HandlerTests(unittest.TestCase):
         transform.assert_called_once_with("hack request", "L33T")
         receipt.assert_called_once_with("agent-1", "session-1", "L33T", True)
 
-    def test_tool_payload_transforms_nested_strings_and_preserves_values(self):
+    def test_tool_request_normalizes_nested_strings_and_preserves_values(self):
         self.handler._config = {"AUTO_CONTEXT_ENABLED": True}
         payload = {"text": "request", "nested": ["reply", {"count": 3, "ok": True}]}
         with patch.object(self.handler, "get_activation", return_value=True), \
                 patch.object(
                     self.handler, "transform_policy",
-                    return_value={"mode": "forced", "encoding": "L33T", "forced": True},
+                    return_value={"mode": "profile", "encoding": "BUBBLE", "forced": False},
                 ), patch.object(
-                    self.handler, "transform_text", side_effect=lambda text, _: f"x:{text}"
-                ) as transform, patch.object(self.handler, "mark_transform_applied") as receipt:
+                    self.handler.parseltongue, "decode_tool_text",
+                    side_effect=lambda text, _: f"plain:{text}",
+                ) as decode, patch.object(self.handler, "mark_transform_applied") as receipt:
             result = self.handler.transform_tool_request(
                 "agent-1", "session-1", "example", payload
             )
 
         self.assertEqual(
-            result, {"text": "x:request", "nested": ["x:reply", {"count": 3, "ok": True}]}
+            result,
+            {"text": "plain:request", "nested": ["plain:reply", {"count": 3, "ok": True}]},
         )
-        self.assertEqual(transform.call_count, 2)
-        receipt.assert_called_once_with("agent-1", "session-1", "L33T", True)
+        self.assertEqual(decode.call_count, 2)
+        receipt.assert_called_once_with("agent-1", "session-1", "BUBBLE", True)
 
-    def test_tool_payload_passes_through_when_inactive(self):
+    def test_bubble_shell_tool_request_is_plaintext_before_execution(self):
+        self.handler._config = {"AUTO_CONTEXT_ENABLED": True}
+        payload = {
+            "timeout": 120,
+            "script": 'ⓔⓒⓗⓞ "test"\nⓕⓞⓡ ⓘⓟ ⓘⓝ 103.154.174.73; ⓓⓞ\n  ⓒⓤⓡⓛ "$ⓘⓟ"\nⓓⓞⓝⓔ',
+        }
+        with patch.object(self.handler, "get_activation", return_value=True), \
+                patch.object(
+                    self.handler, "transform_policy",
+                    return_value={"mode": "profile", "encoding": "BUBBLE", "forced": False},
+                ), patch.object(self.handler, "mark_transform_applied"):
+            result = self.handler.transform_tool_request(
+                "agent-1", "session-1", "shell", payload
+            )
+
+        self.assertEqual(result["timeout"], 120)
+        self.assertEqual(
+            result["script"],
+            'echo "test"\nfor ip in 103.154.174.73; do\n  curl "$ip"\ndone',
+        )
+
+    def test_tool_result_always_passes_through(self):
         self.handler._config = {"AUTO_CONTEXT_ENABLED": True}
         payload = {"text": "request", "nested": ["reply"]}
         with patch.object(self.handler, "get_activation", return_value=True), \
                 patch.object(
-                    self.handler, "transform_policy", return_value={"mode": "inactive", "encoding": ""}
-                ), patch.object(self.handler, "transform_text") as transform:
+                    self.handler, "transform_policy",
+                    return_value={"mode": "profile", "encoding": "BUBBLE"},
+                ), patch.object(self.handler.parseltongue, "decode_tool_text") as decode:
             result = self.handler.transform_tool_result("agent-1", "session-1", "example", payload)
 
         self.assertIs(result, payload)
-        transform.assert_not_called()
+        decode.assert_not_called()
 
     def test_context_maps_preserve_append_and_override_modes(self):
         self.handler._config = {"AUTO_CONTEXT_ENABLED": True}
