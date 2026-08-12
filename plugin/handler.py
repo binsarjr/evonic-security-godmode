@@ -8,10 +8,14 @@ from backend.plugin_manager import (
     register_agent_state_summary_provider,
     register_final_response_handler,
     register_turn_context_provider,
+    register_tool_request_transformer,
+    register_tool_result_transformer,
     register_user_message_transformer,
     unregister_agent_state_summary_provider,
     unregister_final_response_handler,
     unregister_turn_context_provider,
+    unregister_tool_request_transformer,
+    unregister_tool_result_transformer,
     unregister_user_message_transformer,
 )
 
@@ -122,6 +126,37 @@ def transform_user_message(agent_id: str, session_id: str, text: str):
     _remember_original(agent_id, session_id, text, transformed)
     mark_transform_applied(agent_id, session_id, policy["encoding"], transformed != text)
     return transformed
+
+
+def _transform_tool_payload(agent_id: str, session_id: str, _tool_name: str, payload):
+    """Transform strings in tool payloads only when the active policy requires it."""
+    if not _truthy(_config.get("AUTO_CONTEXT_ENABLED", True)) or not get_activation(agent_id):
+        return payload
+    policy = transform_policy(agent_id)
+    if policy["mode"] == "inactive":
+        return payload
+
+    def transform(value):
+        if isinstance(value, str):
+            return transform_text(value, policy["encoding"])
+        if isinstance(value, list):
+            return [transform(item) for item in value]
+        if isinstance(value, dict):
+            return {key: transform(value) for key, value in value.items()}
+        return value
+
+    transformed = transform(payload)
+    if transformed != payload:
+        mark_transform_applied(agent_id, session_id, policy["encoding"], True)
+    return transformed
+
+
+def transform_tool_request(agent_id: str, session_id: str, tool_name: str, args):
+    return _transform_tool_payload(agent_id, session_id, tool_name, args)
+
+
+def transform_tool_result(agent_id: str, session_id: str, tool_name: str, result):
+    return _transform_tool_payload(agent_id, session_id, tool_name, result)
 
 
 def _candidate_profiles(agent_id: str) -> list[dict]:
@@ -354,6 +389,8 @@ def on_enable(sdk=None):
     register_turn_context_provider(provide_context)
     register_agent_state_summary_provider("security_godmode", provide_state)
     register_user_message_transformer("security_godmode", transform_user_message)
+    register_tool_request_transformer("security_godmode", transform_tool_request)
+    register_tool_result_transformer("security_godmode", transform_tool_result)
     register_final_response_handler("security_godmode", evaluate_final_response)
     if sdk:
         sdk.log("Security Godmode enabled; orchestration is programmatic and opt-in per agent.")
@@ -363,5 +400,7 @@ def on_disable(sdk=None):
     unregister_turn_context_provider(provide_context)
     unregister_agent_state_summary_provider("security_godmode")
     unregister_user_message_transformer("security_godmode")
+    unregister_tool_request_transformer("security_godmode")
+    unregister_tool_result_transformer("security_godmode")
     unregister_final_response_handler("security_godmode")
     _runtime.clear()

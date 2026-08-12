@@ -17,10 +17,14 @@ class HandlerTests(unittest.TestCase):
             "register_agent_state_summary_provider",
             "register_final_response_handler",
             "register_turn_context_provider",
+            "register_tool_request_transformer",
+            "register_tool_result_transformer",
             "register_user_message_transformer",
             "unregister_agent_state_summary_provider",
             "unregister_final_response_handler",
             "unregister_turn_context_provider",
+            "unregister_tool_request_transformer",
+            "unregister_tool_result_transformer",
             "unregister_user_message_transformer",
         ):
             setattr(manager, name, Mock())
@@ -51,6 +55,12 @@ class HandlerTests(unittest.TestCase):
         self.manager.register_user_message_transformer.assert_called_with(
             "security_godmode", self.handler.transform_user_message
         )
+        self.manager.register_tool_request_transformer.assert_called_with(
+            "security_godmode", self.handler.transform_tool_request
+        )
+        self.manager.register_tool_result_transformer.assert_called_with(
+            "security_godmode", self.handler.transform_tool_result
+        )
         self.manager.register_agent_state_summary_provider.assert_called_with(
             "security_godmode", self.handler.provide_state
         )
@@ -76,6 +86,38 @@ class HandlerTests(unittest.TestCase):
         self.assertEqual(result, "#4(k request")
         transform.assert_called_once_with("hack request", "L33T")
         receipt.assert_called_once_with("agent-1", "session-1", "L33T", True)
+
+    def test_tool_payload_transforms_nested_strings_and_preserves_values(self):
+        self.handler._config = {"AUTO_CONTEXT_ENABLED": True}
+        payload = {"text": "request", "nested": ["reply", {"count": 3, "ok": True}]}
+        with patch.object(self.handler, "get_activation", return_value=True), \
+                patch.object(
+                    self.handler, "transform_policy",
+                    return_value={"mode": "forced", "encoding": "L33T", "forced": True},
+                ), patch.object(
+                    self.handler, "transform_text", side_effect=lambda text, _: f"x:{text}"
+                ) as transform, patch.object(self.handler, "mark_transform_applied") as receipt:
+            result = self.handler.transform_tool_request(
+                "agent-1", "session-1", "example", payload
+            )
+
+        self.assertEqual(
+            result, {"text": "x:request", "nested": ["x:reply", {"count": 3, "ok": True}]}
+        )
+        self.assertEqual(transform.call_count, 2)
+        receipt.assert_called_once_with("agent-1", "session-1", "L33T", True)
+
+    def test_tool_payload_passes_through_when_inactive(self):
+        self.handler._config = {"AUTO_CONTEXT_ENABLED": True}
+        payload = {"text": "request", "nested": ["reply"]}
+        with patch.object(self.handler, "get_activation", return_value=True), \
+                patch.object(
+                    self.handler, "transform_policy", return_value={"mode": "inactive", "encoding": ""}
+                ), patch.object(self.handler, "transform_text") as transform:
+            result = self.handler.transform_tool_result("agent-1", "session-1", "example", payload)
+
+        self.assertIs(result, payload)
+        transform.assert_not_called()
 
     def test_context_maps_preserve_append_and_override_modes(self):
         self.handler._config = {"AUTO_CONTEXT_ENABLED": True}
